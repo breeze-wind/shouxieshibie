@@ -52,9 +52,10 @@ def load_data(data_dir):
 
 
 # 使用示例
-data_dir = "path/to/your/dataset"  # 数据集根目录
-signals, labels, label_map = load_data(data_dir)
 
-print(f"加载了 {len(signals)} 个样本")
-print("标签映射:", label_map)
-__main__:
+if __name__=="__main__":
+    data_dir = "dataset"  # 数据集根目录
+    signals, labels, label_map = load_data(data_dir)
+
+    print(f"加载了 {len(signals)} 个样本")
+    print("标签映射:", label_map)
