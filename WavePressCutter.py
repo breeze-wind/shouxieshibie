@@ -10,8 +10,8 @@ import chardet
 CONFIG = {
     "input_dir": "dataset/a_bk",  # 原始数据目录
     "output_dir": "processed_data/a_bk",  # 处理后数据保存目录
-    "interruption_threshold": 0.1,  # 连续性中断的最小回升比例（用于静态阈值）
-    "descent_threshold": 0.03,  # 书写下降的最小幅度比例（用于静态阈值）
+    "interruption_threshold": 0.1,  # 连续性中断的最小回升比例（用于旧方法）
+    "descent_threshold": 0.05,  # 书写下降的最小幅度比例（用于旧方法）
     "min_writing_length": 100,  # 最小有效书写长度
     "seq_length": 800,  # 标准化序列长度
     "visualize_samples": True,  # 是否可视化处理结果
@@ -19,9 +19,12 @@ CONFIG = {
     "filter_polyorder": 3,  # 滤波多项式阶数
     "resistance_column": "DeviceInfo_[23082300]",  # 电阻值所在列名
     "normalize_data": True,  # 是否对数据进行归一化
-    "use_dynamic_thresholds": True,  # 是否使用动态阈值
+    "use_dynamic_thresholds": False,  # 是否使用动态阈值
     "window_size": 50,  # 局部阈值计算窗口大小
-    "keep_press_segment": False  # 是否保留按纸过程
+    "keep_press_segment": False,  # 是否保留按纸过程
+    "peak_threshold_ratio": 0.7,  # 极大值阈值比例（相对于平均极大值）
+    "min_segment_length": 50,  # 最小分割段长度
+    "use_derivative_method": True,  # 是否使用导数拐点法
 }
 
 
@@ -67,6 +70,10 @@ def load_data(file_path):
                     if len(resistance) == 0:
                         print("错误：处理后电阻值列为空")
                         return None
+
+                    # 打印数据统计特征
+                    print(
+                        f"数据统计: min={np.min(resistance):.2f}, max={np.max(resistance):.2f}, mean={np.mean(resistance):.2f}, std={np.std(resistance):.2f}")
 
                     return resistance
                 except Exception as e:
@@ -139,59 +146,111 @@ def preprocess(resistance, config):
 
 
 def split_by_continuity(resistance, config):
-    """基于连续性中断分割按纸和书写过程"""
+    """基于拐点检测分割按纸和书写过程"""
     if len(resistance) < 10:
         return [0, len(resistance)]  # 数据过短，直接返回
 
     # 归一化数据（如果配置启用）
     processed_resistance = normalize(resistance) if config["normalize_data"] else resistance
 
-    # 计算动态阈值（如果配置启用）
-    if config["use_dynamic_thresholds"]:
-        inter_threshold, desc_threshold = calculate_dynamic_thresholds(processed_resistance, config)
-    else:
-        inter_threshold = config["interruption_threshold"]
-        desc_threshold = config["descent_threshold"]
-
     # 1. 检测初始电压结束位置
     initial_voltage = np.mean(processed_resistance[:10])
     initial_end = np.where(processed_resistance < 0.9 * initial_voltage)[0][0] if len(
         np.where(processed_resistance < 0.9 * initial_voltage)[0]) > 0 else 10
 
+    # 如果不使用导数方法，回退到旧的连续性中断方法
+    if not config["use_derivative_method"]:
+        # 旧方法代码（保持不变）
+        # ... 此处省略旧方法代码 ...
+        return old_split_method(processed_resistance, config, initial_end)
+
+    # 2. 使用一阶导数检测拐点（极大值和极小值）
+    # 计算一阶导数（差分近似）
+    derivative = np.diff(processed_resistance)
+    # 计算二阶导数（差分的差分）
+    second_derivative = np.diff(derivative)
+
+    # 寻找拐点（二阶导数符号变化的点）
+    inflection_points = []
+    for i in range(len(second_derivative) - 1):
+        # 二阶导数符号变化，表示存在拐点
+        if second_derivative[i] * second_derivative[i + 1] <= 0:
+            inflection_points.append(i + 1)  # +1 是因为导数数组长度减1
+
+    # 3. 过滤拐点：只保留高于阈值的极大值点作为分割点
+    # 计算极小值和极大值点
+    minima_points = []
+    maxima_points = []
+
+    for i in inflection_points:
+        # 如果点i是极小值（左侧导数为负，右侧为正）
+        if derivative[i - 1] < 0 and derivative[i] > 0:
+            minima_points.append(i)
+        # 如果点i是极大值（左侧导数为正，右侧为负）
+        elif derivative[i - 1] > 0 and derivative[i] < 0:
+            maxima_points.append(i)
+
+    # 4. 应用阈值过滤极大值点
+    # 使用平均极大值作为阈值基准
+    if len(maxima_points) > 0:
+        peak_values = [processed_resistance[i] for i in maxima_points]
+        threshold = np.mean(peak_values) * config["peak_threshold_ratio"]  # 配置参数
+
+        # 过滤低于阈值的极大值点
+        filtered_maxima = [i for i in maxima_points if processed_resistance[i] >= threshold]
+
+        # 添加初始结束点和数据结束点
+        split_points = [initial_end] + sorted(filtered_maxima) + [len(processed_resistance) - 1]
+
+        # 确保分割点之间有足够距离
+        final_split_points = [split_points[0]]
+        for i in range(1, len(split_points)):
+            if split_points[i] - final_split_points[-1] >= config["min_segment_length"]:
+                final_split_points.append(split_points[i])
+
+        # 调试输出
+        print(f"检测到 {len(maxima_points)} 个极大值点，过滤后保留 {len(filtered_maxima)} 个分割点")
+        return final_split_points
+    else:
+        # 如果没有找到极大值点，使用简单分割
+        print("警告：未找到符合条件的极大值点，使用简单分割")
+        return [initial_end, len(processed_resistance) - 1]
+
+
+def old_split_method(resistance, config, initial_end):
+    """旧的分割方法（保持不变，用于对比）"""
     # 2. 寻找按纸过程的连续性中断点（按纸结束，书写开始）
     press_end = initial_end
-    max_descent = processed_resistance[initial_end]
+    max_descent = resistance[initial_end]
 
-    for i in range(initial_end + 1, len(processed_resistance) - 1):
-        current_value = processed_resistance[i]
-        prev_value = processed_resistance[i - 1]
-        next_value = processed_resistance[i + 1]
+    # 计算动态阈值（如果配置启用）
+    if config["use_dynamic_thresholds"]:
+        inter_threshold, desc_threshold = calculate_dynamic_thresholds(resistance, config)
+    else:
+        inter_threshold = config["interruption_threshold"]
+        desc_threshold = config["descent_threshold"]
+
+    for i in range(initial_end + 1, len(resistance) - 1):
+        current_value = resistance[i]
+        prev_value = resistance[i - 1]
+        next_value = resistance[i + 1]
 
         # 更新最大下降值
         if current_value < max_descent:
             max_descent = current_value
 
-        # 连续性中断条件：
-        # 1. 当前处于下降趋势
-        # 2. 下一个点转为上升趋势
-        # 3. 上升幅度超过阈值
+        # 连续性中断条件
         if (current_value < prev_value and next_value > current_value and
-                (next_value - current_value) > inter_threshold * abs(initial_voltage - max_descent)):
+                (next_value - current_value) > inter_threshold * abs(np.mean(resistance[:10]) - max_descent)):
             press_end = i
             break
 
     # 3. 分割后续书写周期
-    writing_segment = processed_resistance[press_end:]
+    writing_segment = resistance[press_end:]
     split_points = [0]  # 书写段的起始点
 
     in_descent = False
     peak_value = writing_segment[0]
-
-    # 如果启用局部阈值，计算局部阈值数组
-    if config.get("use_local_thresholds", False):
-        local_thresholds = calculate_local_thresholds(writing_segment, config["window_size"])
-    else:
-        local_thresholds = np.full_like(writing_segment, desc_threshold)
 
     for i in range(1, len(writing_segment) - 1):
         current_value = writing_segment[i]
@@ -202,17 +261,14 @@ def split_by_continuity(resistance, config):
         if current_value > peak_value:
             peak_value = current_value
 
-        # 获取当前位置的阈值（全局或局部）
-        current_threshold = local_thresholds[i]
-
-        # 检测书写周期的开始（上升转下降）
+        # 检测书写周期的开始
         if (not in_descent and current_value > prev_value and next_value < current_value and
-                abs(next_value - current_value) > current_threshold * peak_value):
+                abs(next_value - current_value) > desc_threshold * peak_value):
             split_points.append(i)
             in_descent = True
             peak_value = current_value
 
-        # 检测书写周期的结束（下降转上升）
+        # 检测书写周期的结束
         if in_descent and current_value < prev_value and next_value > current_value:
             in_descent = False
 
@@ -229,6 +285,12 @@ def visualize_splits(resistance, splits, file_name, config):
     # 绘制原始数据或归一化数据
     plot_data = normalize(resistance) if config["normalize_data"] else resistance
     plt.plot(plot_data, 'b-', alpha=0.7, label='Resistance')
+
+    # 绘制导数（用于调试）
+    if config["use_derivative_method"]:
+        derivative = np.diff(plot_data)
+        derivative = np.concatenate([[0], derivative])  # 补全长度
+        plt.plot(derivative * 0.2 + 0.5, 'g-', alpha=0.5, label='Derivative (scaled)')
 
     # 标记分割点
     colors = ['r', 'g', 'm', 'c', 'y', 'k']
