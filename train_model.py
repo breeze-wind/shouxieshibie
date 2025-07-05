@@ -196,24 +196,29 @@ def evaluate_model(model, X_test, y_test, y_test_classes, label_map):
     return cm, report
 
 
-# === 可视化训练过程 ===
+# === 可视化训练过程（英文绘图）===
 def plot_training_history(history):
     """可视化训练历史"""
     plt.figure(figsize=(12, 4))
+    plt.rcParams["font.family"] = ["Arial", "sans-serif"]  # 确保英文字体
 
     # 绘制损失曲线
     plt.subplot(1, 2, 1)
-    plt.plot(history.history['loss'], label='训练损失')
-    plt.plot(history.history['val_loss'], label='验证损失')
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
     plt.legend()
-    plt.title('模型损失')
+    plt.title('Model Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
 
     # 绘制准确率曲线
     plt.subplot(1, 2, 2)
-    plt.plot(history.history['accuracy'], label='训练准确率')
-    plt.plot(history.history['val_accuracy'], label='验证准确率')
+    plt.plot(history.history['accuracy'], label='Training Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
     plt.legend()
-    plt.title('模型准确率')
+    plt.title('Model Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
 
     plt.tight_layout()
     plt.savefig('training_history.png')
