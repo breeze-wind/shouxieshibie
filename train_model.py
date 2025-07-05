@@ -9,6 +9,7 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import confusion_matrix, classification_report
 import time
+import json  # 用于保存label_map
 
 # === 配置参数 ===
 CONFIG = {
@@ -189,8 +190,9 @@ def evaluate_model(model, X_test, y_test, y_test_classes, label_map):
 
     # 生成分类报告
     print("\n分类报告:")
-    report = classification_report(y_test_classes, y_pred_classes,
-                                   target_names=[f"Class_{k}" for k in label_map.values()])
+    # 这里根据label_map的键（类别名称）和值（类别索引），构建分类报告的目标名称
+    target_names = [k for k, v in label_map.items()]
+    report = classification_report(y_test_classes, y_pred_classes, target_names=target_names)
     print(report)
 
     return cm, report
@@ -254,6 +256,12 @@ def main():
 
         # 5. 可视化训练历史
         plot_training_history(history)
+
+        # 6. 保存label_map到模型目录
+        label_map_path = os.path.join(CONFIG["model_dir"], "label_map.json")
+        with open(label_map_path, "w", encoding="utf-8") as f:
+            json.dump(label_map, f, ensure_ascii=False, indent=2)
+        print(f"标签映射已保存至: {label_map_path}")
 
         print(f"\n模型训练完成！最佳模型已保存至: {os.path.join(CONFIG['model_dir'], 'best_model.h5')}")
 

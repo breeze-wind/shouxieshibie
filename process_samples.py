@@ -28,6 +28,24 @@ CONFIG = {
 }
 
 
+def generate_label_map(data_dir):
+    """从数据目录生成类别映射（键为子目录名，值为类别索引）"""
+    label_map = {}
+    label_counter = 0
+
+    # 遍历数据目录下的所有子目录
+    for label_dir in os.listdir(data_dir):
+        full_path = os.path.join(data_dir, label_dir)
+        if os.path.isdir(full_path):
+            label_map[label_dir] = label_counter
+            label_counter += 1
+
+    # 如果没有子目录，假设所有文件属于同一类别
+    if not label_map:
+        label_map[data_dir] = 0
+
+    print(f"生成类别映射: {label_map}")
+    return label_map
 def load_data(file_path):
     """加载CSV数据，处理复合表头，从第3行开始加载"""
     try:
