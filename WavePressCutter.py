@@ -8,9 +8,9 @@ import chardet
 
 # 配置参数
 CONFIG = {
-    "input_dir": "dataset/a_bk",  # 原始数据目录
-    "output_dir": "processed_data/a_bk",  # 处理后数据保存目录
-    "visualization_dir": "visualizations/a_bk",  # 可视化保存目录
+    "input_dir": "dataset/n_bk",  # 原始数据目录
+    "output_dir": "processed_data/n_bk",  # 处理后数据保存目录
+    "visualization_dir": "visualizations/n_bk",  # 可视化保存目录
     "min_writing_length": 28,  # 最小有效书写长度
     "seq_length": 800,  # 标准化序列长度
     "visualize_samples": True,  # 是否可视化处理结果
@@ -23,7 +23,7 @@ CONFIG = {
     "keep_press_segment": False,  # 是否保留按纸过程
     "press_threshold": 0.8,  # 按纸过程检测阈值（相对于初始电压）
     "press_min_length": 30,  # 最小按纸长度
-    "writing_descent_threshold": 0.1,  # 书写段必须下降的最小阈值（归一化后）
+    "writing_descent_threshold": 0.4,  # 书写段必须下降的最小阈值（归一化后）
     "debug_segment": True,  # 是否输出段详细信息
 }
 
