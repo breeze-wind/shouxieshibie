@@ -4,6 +4,6 @@
 show.py脚本用于手动看一个csv的波形
 process_samples.py用于划分数据集（有一份config是宝康的参数），结果在processed_data（需要一个标签一个标签弄，并手动配置输入输出路径），可视化结果在visualizatiions文件夹
 train_model.py用于模型训练，读取processed_data中的数据，其中子目录名称即为标签名。最终标签名与模型存储与models文件夹
-predict.py用于预测（模型人工检验），读取一个csv，txt或npy（process_samples处理后的数据，但npy这个功能尚未调试）,预测结果在prediction_results里
+predict.py用于预测（模型人工检验），读取一个csv，或npy（process_samples处理后的数据，但npy这个功能尚未调试）,预测结果在prediction_results里
 requirements里是版本需求，创建虚拟环境通常ide自动读取
 fjq熬不住了补觉去
