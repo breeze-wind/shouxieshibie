@@ -8,7 +8,7 @@ plt.rcParams['figure.dpi'] = 300
 plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei']
 
 # 使用相对路径读取文件，假设文件名为 Sample20250624213927.csv 且与代码在同一目录
-file_path = './dataset/n_bk/Sample20250624213927.csv'
+file_path = './dataset/deleted/n_bk/jq.csv'
 df = pd.read_csv(file_path, encoding='ISO-8859-1')
 
 # 假设电阻值在第三列（索引为 2），将该列转换为数值类型
