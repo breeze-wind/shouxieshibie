@@ -1,4 +1,5 @@
 import os
+import shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,25 +7,40 @@ from scipy.signal import savgol_filter
 from tqdm import tqdm
 import chardet
 
-# 配置参数
+# 目录路径配置
+# 基础路径参数用于构建完整的输入、输出和可视化路径
+# 当modify_last_subdir为True时，将使用last_subdir替换基础路径中的最后一个子目录
 CONFIG = {
-    "input_dir": "dataset/a_rl",  # 原始数据目录
-    "output_dir": "processed_data/a_rl",  # 处理后数据保存目录
-    "visualization_dir": "visualizations/a_rl",  # 可视化保存目录
-    "min_writing_length": 28,  # 最小有效书写长度
+    "base_input_dir": "dataset/bk",  # 基础输入目录路径，所有原始数据的根目录
+    "base_output_dir": "processed_data/bk",  # 基础输出目录路径，所有处理后数据的根目录
+    "base_visualization_dir": "visualizations/bk",  # 基础可视化目录路径，所有图表的根目录
+
+    "base_delete_dir": "dataset/deleted/bk",  # 基础删除目录路径
+    "last_subdir": "a",  # 最后一个子目录名称，用于路径的动态调整
+    "modify_last_subdir": True,  # 是否仅修改路径中的最后一个子目录
+                                    # True: 使用base_*_dir + last_subdir构建路径
+                                    # False: 直接使用input_dir/output_dir等完整路径
+    "input_dir": "dataset/b_rl",  # 完整输入目录路径 (自动生成)
+    "output_dir": "processed_data/b_rl",  # 完整输出目录路径 (自动生成)
+    "visualization_dir": "visualizations/b_rl",  # 完整可视化目录路径 (自动生成)
+    # "incomplete_files_dir": "dataset/deleted/a_rl",  # 已废弃，使用delete_dir代替
+    "min_writing_length": 20,  # 最小有效书写长度
     "seq_length": 800,  # 标准化序列长度
     "visualize_samples": True,  # 是否可视化处理结果
     "filter_window": 7,  # 滤波窗口大小
     "filter_polyorder": 3,  # 滤波多项式阶数
     "resistance_column": "DeviceInfo_[23082300]",  # 电阻值所在列名
     "normalize_data": True,  # 是否对数据进行归一化
-    "fixed_peak_threshold": 0.5,  # 极大值固定阈值（归一化后）
+    "fixed_peak_threshold": 0.125,  # 极大值固定阈值（归一化后）
     "min_segment_length": 20,  # 最小分割段长度
     "keep_press_segment": False,  # 是否保留按纸过程
     "press_threshold": 0.8,  # 按纸过程检测阈值（相对于初始电压）
     "press_min_length": 30,  # 最小按纸长度
-    "writing_descent_threshold": 0.4,  # 书写段必须下降的最小阈值（归一化后）
+    "writing_descent_threshold": 0.60,  # 书写段必须下降的最小比例（相对于峰值）
     "debug_segment": True,  # 是否输出段详细信息
+    "move_incomplete_files": False,  # 是否移动数据组不足的文件
+    "min_samples_to_keep": 6,        # 保留文件的最小样本数阈值
+
 }
 
 
@@ -208,11 +224,23 @@ def visualize_splits(resistance, split_points, file_name, config, segment_status
             else:
                 status = segment_status[segment_idx] if segment_idx < len(segment_status) else False
                 plt.text(mid_point, max(plot_data) * 0.9,
-                         f'Segment {segment_idx} {status_markers[0] if status else status_markers[1]}',
+                         f'Segment {segment_idx}\n{status_markers[0] if status else status_markers[1]}',
                          horizontalalignment='center', color=color)
 
     plt.legend()
-    plt.title(f'Splits for {file_name}')
+    # 检查文件是否会被移除，如果是则添加红色REMOVED标记
+    is_removed = config["move_incomplete_files"] and 0 < len(segment_status) and sum(segment_status) < config["min_samples_to_keep"]
+    title = f'Splits for {file_name}'
+    if is_removed:
+        title += ' (REMOVED)'
+    plt.title(title)
+    
+    # 如果文件被移除，添加醒目的红色标记
+    if is_removed:
+        plt.text(len(plot_data)*0.5, max(plot_data)*0.5,
+                 'REMOVED', fontsize=30, color='red',
+                 horizontalalignment='center', verticalalignment='center',
+                 bbox=dict(facecolor='white', alpha=0.7), rotation=30)
     plt.xlabel('Time Steps')
     plt.ylabel('Resistance (Normalized)' if config["normalize_data"] else 'Resistance')
     plt.grid(True, alpha=0.3)
@@ -315,7 +343,7 @@ def process_file(file_path, config):
 
         # 判断段是否有效
         length_valid = length >= config["min_writing_length"]
-        descent_valid = descent >= config["writing_descent_threshold"]
+        descent_valid = descent >= (config["writing_descent_threshold"] * peak_value)
         is_valid = length_valid and descent_valid
 
         # 记录段详细信息
@@ -346,13 +374,18 @@ def process_file(file_path, config):
     if config["visualize_samples"] and split_points:
         visualize_splits(resistance, split_points, file_name, config, segment_status, start_idx)
 
+    # 仅当文件不会被移动时才保存样本
+    save_samples = not (config["move_incomplete_files"] and 0 < len(samples) < config["min_samples_to_keep"])
+    
     # 保存处理后的数据
-    if samples and not os.path.exists(config["output_dir"]):
+    if save_samples and samples and not os.path.exists(config["output_dir"]):
         os.makedirs(config["output_dir"])
 
     output_path = os.path.join(config["output_dir"], f'{os.path.splitext(file_name)[0]}_processed.npy')
-    if samples:
+    if save_samples and samples:
         np.save(output_path, np.array(samples))
+    elif not save_samples:
+        print(f"文件 {file_name} 样本数不足，不保存样本")
 
     # 输出段详细信息
     for detail in segment_details:
@@ -361,8 +394,38 @@ def process_file(file_path, config):
     return len(samples), split_points, segment_status
 
 
+def update_directory_paths(config):
+    """
+    根据配置动态更新目录路径
+
+    功能: 根据modify_last_subdir标志决定是否重新构建目录路径
+    - 当modify_last_subdir为True时，使用base_*_dir和last_subdir组合生成新路径
+    - 当modify_last_subdir为False时，保持原有路径不变
+
+    参数:
+        config (dict): 包含路径配置的字典，必须包含以下键:
+            - modify_last_subdir: 是否修改最后一个子目录的标志
+            - base_input_dir: 基础输入目录
+            - base_output_dir: 基础输出目录
+            - base_visualization_dir: 基础可视化目录
+            - last_subdir: 要使用的最后一个子目录名
+
+    返回:
+        dict: 更新后的配置字典，包含更新后的input_dir, output_dir和visualization_dir
+    """
+    if config["modify_last_subdir"]:
+        # 重新构建目录路径: 基础目录 + 最后一个子目录
+        config["input_dir"] = os.path.join(config["base_input_dir"], config["last_subdir"])
+        config["output_dir"] = os.path.join(config["base_output_dir"], config["last_subdir"])
+        config["visualization_dir"] = os.path.join(config["base_visualization_dir"], config["last_subdir"])
+        config["delete_dir"] = os.path.join(config["base_delete_dir"], config["last_subdir"])
+    return config
+
 def process_dataset(config):
     """处理整个数据集"""
+    # 更新目录路径
+    config = update_directory_paths(config)
+    
     if not os.path.exists(config["input_dir"]):
         os.makedirs(config["input_dir"])
         print(f"创建输入目录: {config['input_dir']}")
@@ -380,6 +443,21 @@ def process_dataset(config):
         if num_samples > 0:
             total_samples += num_samples
             processed_files += 1
+        
+        # 检查是否需要移动数据组不足的文件
+        # 使用配置的样本阈值判断是否移动文件
+        if config["move_incomplete_files"] and num_samples < config["min_samples_to_keep"]:
+            # 确保目标目录存在
+            if not os.path.exists(config["delete_dir"]):
+                os.makedirs(config["delete_dir"])
+            
+            # 移动文件到目标目录
+            target_path = os.path.join(config["delete_dir"], file)
+            try:
+                shutil.move(file_path, target_path)
+                print(f"已将数据组不足的文件 '{file}' 移动到 {config['delete_dir']}")
+            except Exception as e:
+                print(f"移动文件 '{file}' 时出错: {e}")
 
     print(f"\n处理完成!")
     print(f"成功处理 {processed_files} 个文件")

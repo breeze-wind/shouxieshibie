@@ -9,7 +9,7 @@ plt.rcParams['figure.dpi'] = 300
 plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei']
 
 # 使用相对路径读取文件
-file_path = 'dataset/a_rl/Sample20250713163827.csv'
+file_path = 'dataset/b_rl/Sample20250713175746.csv'
 df = pd.read_csv(file_path, encoding='ISO-8859-1')
 
 # 获取csv文件所在目录和文件名
