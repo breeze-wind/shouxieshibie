@@ -8,9 +8,9 @@ import chardet
 
 # 配置参数
 CONFIG = {
-    "input_dir": "dataset/n_bk",  # 原始数据目录
-    "output_dir": "processed_data/n_bk",  # 处理后数据保存目录
-    "visualization_dir": "visualizations/n_bk",  # 可视化保存目录
+    "input_dir": "dataset/a_rl",  # 原始数据目录
+    "output_dir": "processed_data/a_rl",  # 处理后数据保存目录
+    "visualization_dir": "visualizations/a_rl",  # 可视化保存目录
     "min_writing_length": 28,  # 最小有效书写长度
     "seq_length": 800,  # 标准化序列长度
     "visualize_samples": True,  # 是否可视化处理结果
