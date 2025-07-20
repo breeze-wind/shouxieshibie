@@ -13,8 +13,8 @@ import json  # 用于保存label_map
 
 # === 配置参数 ===
 CONFIG = {
-    "data_dir": "processed_data",  # 处理后样本目录
-    "model_dir": "models",  # 模型保存目录
+    "data_dir": "processed_data/test/bk",  # 处理后样本目录
+    "model_dir": "models/test_bk",  # 模型保存目录
     "seq_length": 800,  # 序列长度
     "batch_size": 32,  # 训练批次大小
     "epochs": 50,  # 最大训练轮数

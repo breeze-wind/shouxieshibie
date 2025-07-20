@@ -11,12 +11,12 @@ import chardet
 # 基础路径参数用于构建完整的输入、输出和可视化路径
 # 当modify_last_subdir为True时，将使用last_subdir替换基础路径中的最后一个子目录
 CONFIG = {
-    "base_input_dir": "dataset/bk",  # 基础输入目录路径，所有原始数据的根目录
-    "base_output_dir": "processed_data/bk",  # 基础输出目录路径，所有处理后数据的根目录
-    "base_visualization_dir": "visualizations/bk",  # 基础可视化目录路径，所有图表的根目录
+    "base_input_dir": "dataset",  # 基础输入目录路径，所有原始数据的根目录
+    "base_output_dir": "processed_data",  # 基础输出目录路径，所有处理后数据的根目录
+    "base_visualization_dir": "visualizations",  # 基础可视化目录路径，所有图表的根目录
 
-    "base_delete_dir": "dataset/deleted/bk",  # 基础删除目录路径
-    "last_subdir": "a",  # 最后一个子目录名称，用于路径的动态调整
+    "base_delete_dir": "dataset/deleted",  # 基础删除目录路径
+    "last_subdir": "test/bk/yuce",  # 最后一个子目录名称，用于路径的动态调整
     "modify_last_subdir": True,  # 是否仅修改路径中的最后一个子目录
                                     # True: 使用base_*_dir + last_subdir构建路径
                                     # False: 直接使用input_dir/output_dir等完整路径
