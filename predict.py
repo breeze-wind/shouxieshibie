@@ -34,8 +34,8 @@ PROCESS_CONFIG = {
 # === 预测配置 ===
 PREDICT_CONFIG = {
     "model_path": "models/test_bk/best_model.h5",  # 模型路径
-    "processed_dir": "predict_samples/bk/yuce",  # 处理后NPY目录
-    "output_dir": "prediction_results/2.0.1",  # 预测结果保存目录
+    "processed_dir": "predict_samples/bk/xunlian/a",  # 处理后NPY目录
+    "output_dir": "prediction_results/2.0.2/xunlian_a",  # 预测结果保存目录
     "seq_length": 800,  # 序列长度
     "global_normalization": True,  # 使用全局归一化
 }

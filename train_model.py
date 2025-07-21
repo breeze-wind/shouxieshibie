@@ -17,7 +17,7 @@ CONFIG = {
     "model_dir": "models/test_bk",  # 模型保存目录
     "seq_length": 800,  # 序列长度
     "batch_size": 32,  # 训练批次大小
-    "epochs": 50,  # 最大训练轮数
+    "epochs": 500,  # 最大训练轮数
     "n_classes": 10,  # 分类类别数（需根据实际数据修改）
 }
 
@@ -105,15 +105,19 @@ def build_cnn_lstm_model(seq_length=800, n_classes=10):
         Conv1D(filters=64, kernel_size=7, activation='relu', padding='same',
                input_shape=(seq_length, 1)),
         MaxPooling1D(pool_size=2),
-        Dropout(0.2),
+        Dropout(0.1),
 
         Conv1D(filters=128, kernel_size=5, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.2),
+        Dropout(0.1),
 
         Conv1D(filters=256, kernel_size=3, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.2),
+        Dropout(0.1),
+
+        Conv1D(filters=512, kernel_size=3, activation='relu', padding='same'),
+        MaxPooling1D(pool_size=2),
+        Dropout(0.1),
 
         # LSTM层 - 分析时序依赖
         Bidirectional(LSTM(128, return_sequences=True)),
