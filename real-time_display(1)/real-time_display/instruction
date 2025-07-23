@@ -1,0 +1,6 @@
+real-time_display_COMx2 是直接从串口读取数据后显示，
+介于“TS-485同步监测助手.V4.1.exe”已经占用了唯一的串口，需要通过软件或硬件方法分串口
+
+real-time_display_CSV 是不断扫描CSV文件读取数据，需要提前输入文件名后运行。
+
+animation text 仅做测试，测试动画功能
