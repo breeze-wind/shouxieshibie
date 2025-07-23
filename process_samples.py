@@ -16,7 +16,7 @@ CONFIG = {
     "base_visualization_dir": "visualizations",  # 基础可视化目录路径，所有图表的根目录
 
     "base_delete_dir": "dataset/deleted",  # 基础删除目录路径
-    "last_subdir": "test/bk/a",  # 最后一个子目录名称，用于路径的动态调整
+    "last_subdir": "test/bk/e",  # 最后一个子目录名称，用于路径的动态调整
     "modify_last_subdir": True,  # 是否仅修改路径中的最后一个子目录
                                     # True: 使用base_*_dir + last_subdir构建路径
                                     # False: 直接使用input_dir/output_dir等完整路径

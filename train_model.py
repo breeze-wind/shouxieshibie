@@ -11,6 +11,7 @@ from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import confusion_matrix, classification_report
 import time
 import json  # 用于保存label_map
+import joblib
 
 # === 配置参数 ===
 CONFIG = {
@@ -93,6 +94,11 @@ def preprocess_data(X, y, n_classes):
     X = X_scaled.reshape(X.shape)
     print(f"标准化后数据: mean={X.mean():.4f}, std={X.std():.4f}")
 
+    # 保存标准化器
+    scaler_path = os.path.join(CONFIG["model_dir"], "scaler.pkl")
+    joblib.dump(scaler, scaler_path)
+    print(f"标准化器已保存至: {scaler_path}")
+
     # 划分训练集、验证集和测试集
     X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.2, random_state=42)
     X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
@@ -122,11 +128,11 @@ def build_cnn_lstm_model(seq_length=800, n_classes=10):
 
         Conv1D(filters=256, kernel_size=3, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.1),
+        Dropout(0.2),
 
         Conv1D(filters=512, kernel_size=3, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.1),
+        Dropout(0.3),
 
         # 新增LSTM开关逻辑
         *([  # 当use_lstm=True时添加的层
@@ -165,7 +171,7 @@ def train_model(X_train, X_val, y_train, y_val, n_classes, seq_length, epochs, b
 
     # 设置回调函数
     callbacks = [
-        EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
+        EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True),
         ModelCheckpoint(
             os.path.join(CONFIG["model_dir"], 'best_model.h5'),
             monitor='val_accuracy',
