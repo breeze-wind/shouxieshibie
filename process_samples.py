@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from tqdm import tqdm
 import chardet
-
+from scipy.interpolate import interp1d
 # 目录路径配置
 # 基础路径参数用于构建完整的输入、输出和可视化路径
 # 当modify_last_subdir为True时，将使用last_subdir替换基础路径中的最后一个子目录
@@ -16,7 +16,7 @@ CONFIG = {
     "base_visualization_dir": "visualizations",  # 基础可视化目录路径，所有图表的根目录
 
     "base_delete_dir": "dataset/deleted",  # 基础删除目录路径
-    "last_subdir": "test/bk/yuce",  # 最后一个子目录名称，用于路径的动态调整
+    "last_subdir": "test/bk/e",  # 最后一个子目录名称，用于路径的动态调整
     "modify_last_subdir": True,  # 是否仅修改路径中的最后一个子目录
                                     # True: 使用base_*_dir + last_subdir构建路径
                                     # False: 直接使用input_dir/output_dir等完整路径
@@ -25,7 +25,7 @@ CONFIG = {
     "visualization_dir": "visualizations/b_rl",  # 完整可视化目录路径 (自动生成)
     # "incomplete_files_dir": "dataset/deleted/a_rl",  # 已废弃，使用delete_dir代替
     "min_writing_length": 20,  # 最小有效书写长度
-    "seq_length": 800,  # 标准化序列长度
+    "seq_length": 50,  # 标准化序列长度
     "visualize_samples": True,  # 是否可视化处理结果
     "filter_window": 7,  # 滤波窗口大小
     "filter_polyorder": 3,  # 滤波多项式阶数
@@ -40,7 +40,9 @@ CONFIG = {
     "debug_segment": True,  # 是否输出段详细信息
     "move_incomplete_files": False,  # 是否移动数据组不足的文件
     "min_samples_to_keep": 6,        # 保留文件的最小样本数阈值
-
+    # 添加校验参数
+    "min_seq_length": 50,
+    "max_seq_length": 1000
 }
 
 
@@ -364,19 +366,23 @@ def process_file(file_path, config):
         if is_valid:
             sample = normalized_segment
             # 标准化序列长度
-            if len(sample) < config["seq_length"]:
-                sample = np.pad(sample, (0, config["seq_length"] - len(sample)), 'constant')
-            else:
-                sample = sample[:config["seq_length"]]
+            if len(sample) != config["seq_length"]:
+                # 原始样本的索引
+                x_old = np.arange(len(sample))
+                # 目标样本的索引
+                x_new = np.linspace(0, len(sample) - 1, config["seq_length"])
+                # 创建插值函数
+                f = interp1d(x_old, sample, kind='linear')
+                # 进行插值得到新样本
+                sample = f(x_new)
             samples.append(sample)
-
     # 可视化分割结果
     if config["visualize_samples"] and split_points:
         visualize_splits(resistance, split_points, file_name, config, segment_status, start_idx)
 
     # 仅当文件不会被移动时才保存样本
     save_samples = not (config["move_incomplete_files"] and 0 < len(samples) < config["min_samples_to_keep"])
-    
+
     # 保存处理后的数据
     if save_samples and samples and not os.path.exists(config["output_dir"]):
         os.makedirs(config["output_dir"])
@@ -425,7 +431,7 @@ def process_dataset(config):
     """处理整个数据集"""
     # 更新目录路径
     config = update_directory_paths(config)
-    
+
     if not os.path.exists(config["input_dir"]):
         os.makedirs(config["input_dir"])
         print(f"创建输入目录: {config['input_dir']}")
@@ -443,14 +449,14 @@ def process_dataset(config):
         if num_samples > 0:
             total_samples += num_samples
             processed_files += 1
-        
+
         # 检查是否需要移动数据组不足的文件
         # 使用配置的样本阈值判断是否移动文件
         if config["move_incomplete_files"] and num_samples < config["min_samples_to_keep"]:
             # 确保目标目录存在
             if not os.path.exists(config["delete_dir"]):
                 os.makedirs(config["delete_dir"])
-            
+
             # 移动文件到目标目录
             target_path = os.path.join(config["delete_dir"], file)
             try:
@@ -469,4 +475,5 @@ def process_dataset(config):
 
 
 if __name__ == "__main__":
+    process_dataset(CONFIG)
     process_dataset(CONFIG)

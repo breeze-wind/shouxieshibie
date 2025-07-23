@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Dense, Dropout, Bidirectional
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Dense, Dropout, Bidirectional, GlobalAveragePooling1D  # 添加GlobalAveragePooling1D
+
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import confusion_matrix, classification_report
@@ -15,15 +16,19 @@ import json  # 用于保存label_map
 CONFIG = {
     "data_dir": "processed_data/test/bk",  # 处理后样本目录
     "model_dir": "models/test_bk",  # 模型保存目录
-    "seq_length": 800,  # 序列长度
+    "seq_length": 50,  # 统一序列长度
     "batch_size": 32,  # 训练批次大小
     "epochs": 500,  # 最大训练轮数
     "n_classes": 10,  # 分类类别数（需根据实际数据修改）
+    # 添加校验参数
+    "min_seq_length": 50,
+    "max_seq_length": 1000,
+    "use_lstm": False,  # 新增LSTM开关配置
 }
 
 
 # === 数据加载与预处理 ===
-def load_processed_data(data_dir, seq_length=800):
+def load_processed_data(data_dir, seq_length=None):
     """加载处理后的样本数据及标签"""
     all_samples = []
     all_labels = []
@@ -66,6 +71,10 @@ def load_processed_data(data_dir, seq_length=800):
     # 合并所有样本
     X = np.concatenate(all_samples, axis=0)
     y = np.array(all_labels)
+
+    # 添加长度校验
+    if seq_length < CONFIG["min_seq_length"] or seq_length > CONFIG["max_seq_length"]:
+        raise ValueError(f"序列长度{seq_length}超出允许范围({CONFIG['min_seq_length']}-{CONFIG['max_seq_length']})")
 
     # 重塑数据以适应CNN-LSTM输入: (样本数, 序列长度, 特征数)
     X = X.reshape(-1, seq_length, 1)
@@ -119,14 +128,18 @@ def build_cnn_lstm_model(seq_length=800, n_classes=10):
         MaxPooling1D(pool_size=2),
         Dropout(0.1),
 
-        # LSTM层 - 分析时序依赖
-        Bidirectional(LSTM(128, return_sequences=True)),
-        Dropout(0.3),
+        # 新增LSTM开关逻辑
+        *([  # 当use_lstm=True时添加的层
+            Bidirectional(LSTM(128, return_sequences=True)),
+            Dropout(0.3),
+            Bidirectional(LSTM(64)),
+            Dropout(0.3),
+        ] if CONFIG["use_lstm"] else [
+            # 当关闭LSTM时可选的替代结构（可选）
+            GlobalAveragePooling1D()
+        ]),
 
-        Bidirectional(LSTM(64)),
-        Dropout(0.3),
-
-        # 分类输出层
+        # 分类输出层保持不变
         Dense(64, activation='relu'),
         Dense(n_classes, activation='softmax')
     ])

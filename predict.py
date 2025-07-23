@@ -16,7 +16,7 @@ PROCESS_CONFIG = {
     "output_dir": "processed_data/test",  # 处理后NPY保存目录
     "visualization_dir": "visualizations/test",  # 可视化保存目录
     "min_writing_length": 28,  # 最小有效书写长度
-    "seq_length": 800,  # 标准化序列长度
+    "seq_length": 50,  # 标准化序列长度
     "visualize_samples": False,  # 处理时不生成可视化
     "filter_window": 7,  # 滤波窗口大小
     "filter_polyorder": 3,  # 滤波多项式阶数
@@ -35,9 +35,13 @@ PROCESS_CONFIG = {
 PREDICT_CONFIG = {
     "model_path": "models/test_bk/best_model.h5",  # 模型路径
     "processed_dir": "predict_samples/bk/xunlian/a",  # 处理后NPY目录
-    "output_dir": "prediction_results/2.0.2/xunlian_a",  # 预测结果保存目录
-    "seq_length": 800,  # 序列长度
+    "output_dir": "prediction_results/2.0.4/xunlian_a",  # 预测结果保存目录
+    "seq_length": 50,  # 序列长度
     "global_normalization": True,  # 使用全局归一化
+    # 原有配置保持不变
+    # 添加校验参数
+    "min_seq_length": 50,
+    "max_seq_length": 1000
 }
 
 # === 绘图配置 ===
@@ -200,10 +204,11 @@ def generate_samples(resistance, config):
 
         if descent >= config.get("writing_descent_threshold", 0.4):
             sample = normalized_segment
-            if len(sample) < config.get("seq_length", 800):
-                sample = np.pad(sample, (0, config.get("seq_length", 800) - len(sample)), 'constant')
+            # 修改硬编码引用
+            if len(sample) < config["seq_length"]:
+                sample = np.pad(sample, (0, config["seq_length"] - len(sample)), 'constant')
             else:
-                sample = sample[:config.get("seq_length", 800)]
+                sample = sample[:config["seq_length"]]
             samples.append(sample)
 
     return samples
