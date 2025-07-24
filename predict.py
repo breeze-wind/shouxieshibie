@@ -11,7 +11,8 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 # === 预测配置 ===
 PREDICT_CONFIG = {
     "model_path": "models/test_bk/best_model.h5",  # 模型路径
-    "processed_dir": "predict_samples/bk/xunlian/b",  # 处理后NPY目录
+    "processed_dir": "predict_samples/bk/yuce"
+                     ,  # 处理后NPY目录
     "output_dir": "prediction_results/2.0.6/bk",  # 预测结果保存目录
     "seq_length": 50,  # 序列长度
     "global_normalization": True,  # 使用全局归一化

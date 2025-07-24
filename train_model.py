@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv1D, MaxPooling1D, LSTM, Dense, Dropout, Bidirectional, GlobalAveragePooling1D  # 添加GlobalAveragePooling1D
+from tensorflow.keras.layers import Conv1D, MaxPooling1D,AveragePooling1D, LSTM, Dense, Dropout, Bidirectional, GlobalAveragePooling1D  # 添加GlobalAveragePooling1D
 
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
@@ -117,22 +117,25 @@ def build_cnn_lstm_model(seq_length=800, n_classes=10):
     """构建CNN-LSTM模型"""
     model = Sequential([
         # CNN层 - 提取局部特征
-        Conv1D(filters=64, kernel_size=7, activation='relu', padding='same',
+        Conv1D(filters=264, kernel_size=8, activation='relu', padding='causal',
                input_shape=(seq_length, 1)),
         MaxPooling1D(pool_size=2),
+        Dropout(0.1),
+        Conv1D(filters=64, kernel_size=10, activation='relu', padding='causal',
+               input_shape=(seq_length, 1)),
+        MaxPooling1D(pool_size=2),
+        Dropout(0.1),
+        Conv1D(filters=128, kernel_size=20, activation='relu', padding='causal'),
+        MaxPooling1D(pool_size=2),
+        Dropout(0.5),
+
+        Conv1D(filters=256, kernel_size=10, activation='relu', padding='causal'),
+        AveragePooling1D(pool_size=2),
+        Dropout(0.5),
+
+        Conv1D(filters=512, kernel_size=30, activation='relu', padding='causal'),
+        MaxPooling1D(pool_size=2),
         Dropout(0.3),
-
-        Conv1D(filters=128, kernel_size=5, activation='relu', padding='same'),
-        MaxPooling1D(pool_size=2),
-        Dropout(0.4),
-
-        Conv1D(filters=256, kernel_size=3, activation='relu', padding='same'),
-        MaxPooling1D(pool_size=2),
-        Dropout(0.4),
-
-        Conv1D(filters=512, kernel_size=3, activation='relu', padding='causal'),
-        MaxPooling1D(pool_size=2),
-        Dropout(0.4),
 
         # 新增LSTM开关逻辑
         *([  # 当use_lstm=True时添加的层
