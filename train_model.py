@@ -20,7 +20,7 @@ CONFIG = {
     "seq_length": 50,  # 统一序列长度
     "batch_size": 32,  # 训练批次大小
     "epochs": 500,  # 最大训练轮数
-    "n_classes": 10,  # 分类类别数（需根据实际数据修改）
+    "n_classes": 5,  # 分类类别数（需根据实际数据修改）
     # 添加校验参数
     "min_seq_length": 50,
     "max_seq_length": 1000,
@@ -120,19 +120,19 @@ def build_cnn_lstm_model(seq_length=800, n_classes=10):
         Conv1D(filters=64, kernel_size=7, activation='relu', padding='same',
                input_shape=(seq_length, 1)),
         MaxPooling1D(pool_size=2),
-        Dropout(0.1),
+        Dropout(0.3),
 
         Conv1D(filters=128, kernel_size=5, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.1),
+        Dropout(0.4),
 
         Conv1D(filters=256, kernel_size=3, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.2),
+        Dropout(0.4),
 
-        Conv1D(filters=512, kernel_size=3, activation='relu', padding='same'),
+        Conv1D(filters=512, kernel_size=3, activation='relu', padding='causal'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.3),
+        Dropout(0.4),
 
         # 新增LSTM开关逻辑
         *([  # 当use_lstm=True时添加的层
