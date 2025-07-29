@@ -606,17 +606,16 @@ class BreakpointAnnotator:
         self.main_frame = ttk.Frame(root)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # 创建菜单栏
-        self.menu_bar = tk.Menu(root)
-        self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.file_menu.add_command(label="打开CSV文件", command=self.load_file)
-        self.file_menu.add_command(label="保存断点配置", command=self.save_breakpoints)
-        self.file_menu.add_command(label="保存分段数据", command=self.save_segments)  # 新增
-        self.file_menu.add_separator()
-        self.file_menu.add_command(label="打开下一个样本", command=self.open_next_file)  # 新增
-        self.file_menu.add_command(label="退出", command=root.quit)
-        self.menu_bar.add_cascade(label="文件", menu=self.file_menu)
-        root.config(menu=self.menu_bar)
+        # 创建菜单栏（修改为按钮布局）
+        self.toolbar_frame = ttk.Frame(self.main_frame)
+        self.toolbar_frame.pack(fill=tk.X, pady=5)
+
+        # 创建展开的按钮组
+        ttk.Button(self.toolbar_frame, text="打开CSV", command=self.load_file).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.toolbar_frame, text="保存断点", command=self.save_breakpoints).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.toolbar_frame, text="保存分段", command=self.save_segments).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.toolbar_frame, text="下一个样本", command=self.open_next_file).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.toolbar_frame, text="退出", command=root.quit).pack(side=tk.RIGHT, padx=2)
 
         # 通道选择框架
         self.channel_frame = ttk.Frame(self.main_frame)
@@ -939,4 +938,5 @@ if __name__ == "__main__":
 
 # 注意：visualize_combined_channels函数已在文件上方全局定义，此处无需重复定义        plt.savefig(save_path)
         plt.close()        # ... 其他初始化代码保持不变 ...
+
 
