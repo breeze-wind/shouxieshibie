@@ -613,6 +613,7 @@ class BreakpointAnnotator:
         self.file_menu.add_command(label="保存断点配置", command=self.save_breakpoints)
         self.file_menu.add_command(label="保存分段数据", command=self.save_segments)  # 新增
         self.file_menu.add_separator()
+        self.file_menu.add_command(label="打开下一个样本", command=self.open_next_file)  # 新增
         self.file_menu.add_command(label="退出", command=root.quit)
         self.menu_bar.add_cascade(label="文件", menu=self.file_menu)
         root.config(menu=self.menu_bar)
@@ -666,6 +667,34 @@ class BreakpointAnnotator:
         self.status_text.set("就绪: 请打开CSV文件开始标注")
         ttk.Label(self.main_frame, textvariable=self.status_text).pack(fill=tk.X, pady=5)
 
+    def open_next_file(self):
+        """打开当前文件所在目录的下一个CSV文件"""
+        if not self.current_file:
+            messagebox.showwarning("警告", "请先打开一个文件")
+            return
+
+        current_dir = os.path.dirname(self.current_file)
+        csv_files = sorted([f for f in os.listdir(current_dir) if f.lower().endswith('.csv')])
+
+        if not csv_files:
+            messagebox.showinfo("信息", "当前目录没有CSV文件")
+            return
+
+        try:
+            current_index = csv_files.index(os.path.basename(self.current_file))
+            next_index = (current_index + 1) % len(csv_files)
+            next_file = os.path.join(current_dir, csv_files[next_index])
+
+            # 加载并更新显示
+            self.current_file = next_file
+            self.resistance_data = load_data(next_file)
+            self.split_points = []
+            self.update_plot()
+            self.status_text.set(f"已加载下一个样本: {os.path.basename(next_file)}")
+
+        except ValueError:
+            messagebox.showerror("错误", "当前文件不在目录列表中")
+        plt.close()  # ... 其他初始化代码保持不变 ...
     def load_file(self):
         """加载CSV文件并显示当前通道数据"""
         file_path = filedialog.askopenfilename(
@@ -910,4 +939,4 @@ if __name__ == "__main__":
 
 # 注意：visualize_combined_channels函数已在文件上方全局定义，此处无需重复定义        plt.savefig(save_path)
         plt.close()        # ... 其他初始化代码保持不变 ...
-        plt.close()        # ... 其他初始化代码保持不变 ...
+
