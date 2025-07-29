@@ -13,7 +13,7 @@ PREDICT_CONFIG = {
     "model_path": "models/test_bk/best_model.h5",  # 模型路径
     "processed_dir": "predict_samples/bk/yuce"
                      ,  # 处理后NPY目录
-    "output_dir": "prediction_results/2.0.6/bk",  # 预测结果保存目录
+    "output_dir": "prediction_results/2.0.7/bk/yuce",  # 预测结果保存目录
     "seq_length": 50,  # 序列长度
     "global_normalization": True,  # 使用全局归一化
     # 原有配置保持不变

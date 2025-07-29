@@ -18,13 +18,13 @@ CONFIG = {
     "data_dir": "processed_data/test/bk",  # 处理后样本目录
     "model_dir": "models/test_bk",  # 模型保存目录
     "seq_length": 50,  # 统一序列长度
-    "batch_size": 32,  # 训练批次大小
+    "batch_size": 16,  # 训练批次大小
     "epochs": 500,  # 最大训练轮数
     "n_classes": 5,  # 分类类别数（需根据实际数据修改）
     # 添加校验参数
     "min_seq_length": 50,
     "max_seq_length": 1000,
-    "use_lstm": False,  # 新增LSTM开关配置
+    "use_lstm": True,  # 新增LSTM开关配置
 }
 
 
@@ -117,31 +117,31 @@ def build_cnn_lstm_model(seq_length=800, n_classes=10):
     """构建CNN-LSTM模型"""
     model = Sequential([
         # CNN层 - 提取局部特征
-        Conv1D(filters=264, kernel_size=8, activation='relu', padding='causal',
+        Conv1D(filters=256, kernel_size=8, activation='relu', padding='causal',
                input_shape=(seq_length, 1)),
         MaxPooling1D(pool_size=2),
-        Dropout(0.1),
-        Conv1D(filters=64, kernel_size=10, activation='relu', padding='causal',
+        Dropout(0.2),
+        Conv1D(filters=128, kernel_size=10, activation='relu', padding='same',
                input_shape=(seq_length, 1)),
         MaxPooling1D(pool_size=2),
-        Dropout(0.1),
-        Conv1D(filters=128, kernel_size=20, activation='relu', padding='causal'),
+        Dropout(0.2),
+        Conv1D(filters=128, kernel_size=11, activation='relu', padding='causal'),
         MaxPooling1D(pool_size=2),
-        Dropout(0.5),
+        Dropout(0.4),
 
-        Conv1D(filters=256, kernel_size=10, activation='relu', padding='causal'),
+        Conv1D(filters=256, kernel_size=12, activation='relu', padding='causal'),
         AveragePooling1D(pool_size=2),
-        Dropout(0.5),
+        Dropout(0.4),
 
-        Conv1D(filters=512, kernel_size=30, activation='relu', padding='causal'),
+        Conv1D(filters=512, kernel_size=15, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
         Dropout(0.3),
 
         # 新增LSTM开关逻辑
         *([  # 当use_lstm=True时添加的层
-            Bidirectional(LSTM(128, return_sequences=True)),
+            Bidirectional(LSTM(256, return_sequences=True)),
             Dropout(0.3),
-            Bidirectional(LSTM(64)),
+            Bidirectional(LSTM(256)),
             Dropout(0.3),
         ] if CONFIG["use_lstm"] else [
             # 当关闭LSTM时可选的替代结构（可选）

@@ -3,6 +3,26 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/test/a" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/test/bk/g" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/test/bk/h" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/test/bk/i" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/test/bk/j" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/O" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/P" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/Q" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/R" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/S" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/T" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/U" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/V" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/W" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/X" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/Y" />
+      <excludeFolder url="file://$MODULE_DIR$/dataset/to be filtered/新建文件夹" />
+      <excludeFolder url="file://$MODULE_DIR$/dynamic_display/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/dynamic_display/processed_data" />
+      <excludeFolder url="file://$MODULE_DIR$/杂物" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.8 (shouxieshibie) (2)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
