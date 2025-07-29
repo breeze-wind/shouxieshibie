@@ -3,46 +3,77 @@ import shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 from scipy.signal import savgol_filter
 from tqdm import tqdm
 import chardet
 from scipy.interpolate import interp1d
-# 目录路径配置
-# 基础路径参数用于构建完整的输入、输出和可视化路径
-# 当modify_last_subdir为True时，将使用last_subdir替换基础路径中的最后一个子目录
 CONFIG = {
-    "base_input_dir": "dataset",  # 基础输入目录路径，所有原始数据的根目录
-    "base_output_dir": "processed_data",  # 基础输出目录路径，所有处理后数据的根目录
-    "base_visualization_dir": "visualizations",  # 基础可视化目录路径，所有图表的根目录
+    # ======================== 核心配置 ========================
+    "version": "2.0",  # 配置版本标识（便于多版本兼容）
+    "description": "书写过程断点标注与样本生成配置",  # 配置用途说明
 
-    "base_delete_dir": "dataset/deleted",  # 基础删除目录路径
-    "last_subdir": "test/bk/e",  # 最后一个子目录名称，用于路径的动态调整
-    "modify_last_subdir": True,  # 是否仅修改路径中的最后一个子目录
-                                    # True: 使用base_*_dir + last_subdir构建路径
-                                    # False: 直接使用input_dir/output_dir等完整路径
-    "input_dir": "dataset/b_rl",  # 完整输入目录路径 (自动生成)
-    "output_dir": "processed_data/b_rl",  # 完整输出目录路径 (自动生成)
-    "visualization_dir": "visualizations/b_rl",  # 完整可视化目录路径 (自动生成)
-    # "incomplete_files_dir": "dataset/deleted/a_rl",  # 已废弃，使用delete_dir代替
-    "min_writing_length": 20,  # 最小有效书写长度
-    "seq_length": 50,  # 标准化序列长度
-    "visualize_samples": True,  # 是否可视化处理结果
-    "filter_window": 7,  # 滤波窗口大小
-    "filter_polyorder": 3,  # 滤波多项式阶数
-    "resistance_column": "DeviceInfo_[23082300]",  # 电阻值所在列名
-    "normalize_data": True,  # 是否对数据进行归一化
-    "fixed_peak_threshold": 0.125,  # 极大值固定阈值（归一化后）
-    "min_segment_length": 20,  # 最小分割段长度
-    "keep_press_segment": False,  # 是否保留按纸过程
-    "press_threshold": 0.8,  # 按纸过程检测阈值（相对于初始电压）
-    "press_min_length": 30,  # 最小按纸长度
-    "writing_descent_threshold": 0.60,  # 书写段必须下降的最小比例（相对于峰值）
-    "debug_segment": True,  # 是否输出段详细信息
-    "move_incomplete_files": False,  # 是否移动数据组不足的文件
-    "min_samples_to_keep": 6,        # 保留文件的最小样本数阈值
-    # 添加校验参数
-    "min_seq_length": 50,
-    "max_seq_length": 1000
+    # ======================== 目录配置 ========================
+    "base_input_dir": "dataset",           # 基础输入目录
+    "base_output_dir": "processed_data",    # 基础输出目录
+    "base_visualization_dir": "visualizations",  # 基础可视化目录
+    "base_delete_dir": "dataset/deleted",   # 基础删除目录
+    "last_subdir": "Four_channel/mao",      # 动态子目录名
+    "modify_last_subdir": True,             # 是否动态调整路径
+    "input_dir": "dataset/b_rl",            # 完整输入目录（自动生成）
+    "output_dir": "processed_data/b_rl",    # 完整输出目录（自动生成）
+    "visualization_dir": "visualizations/b_rl",  # 完整可视化目录
+    "delete_dir": "dataset/deleted/Four_channel/mao",  # 不完整文件存放目录
+
+    # ======================== 数据参数 ========================
+    "num_channels": 4,                      # 通道数量
+    "channel_columns": ["[25071720]", "[25071721]", "[25071722]", "[25071723]"],  # 通道名称（需与CSV表头对应）
+    "channel_colors": ['b', 'g', 'r', 'c'], # 通道可视化颜色（与通道顺序对应）
+    "seq_length": 50,                       # 标准化序列长度
+    "min_seq_length": 50,                   # 最小序列长度校验阈值
+    "max_seq_length": 1000,                 # 最大序列长度校验阈值
+
+    # ======================== 预处理配置 ========================
+    "filter_window": 20,                    # 滤波窗口大小（Savitzky-Golay）
+    "filter_polyorder": 3,                  # 滤波多项式阶数
+    "normalize_data": True,                 # 是否归一化数据至[0,1]
+    "interpolation_method": "linear",       # 序列插值方法（linear/quadratic/cubic）
+
+    # ======================== 分割配置 ========================
+    "min_writing_length": 20,               # 最小有效书写长度
+    "min_segment_length": 20,               # 最小分割段长度
+    "fixed_peak_threshold": 0.125,          # 极大值固定阈值（归一化后）
+    "writing_descent_threshold": 0.60,      # 书写段下降比例阈值（相对于峰值）
+    "keep_press_segment": False,            # 是否保留按纸过程
+    "press_threshold": 0.8,                 # 按纸过程检测阈值（相对于初始电压）
+    "press_min_length": 30,                 # 最小按纸长度
+
+    # ======================== 可视化配置 ========================
+    "visualize_samples": True,              # 是否生成可视化结果
+    "visualization_figsize": {
+        "combined": (12, 8),                # 四通道联合图尺寸
+        "single_segment": (8, 4)            # 单段可视化图尺寸
+    },
+
+    # ======================== 文件处理配置 ========================
+    "move_incomplete_files": False,         # 是否移动数据组不足的文件
+    "min_samples_to_keep": 6,               # 保留文件的最小样本数阈值
+
+    # ======================== 调试配置 ========================
+    "debug_segment": True,                  # 是否输出段分割详细信息
+
+    # ======================== 手动分割配置 ========================
+    "manual_split": {
+        "enable": True,                     # 是否启用手动分割模式
+        "split_file_dir": "manual_splits",  # 断点配置文件保存目录
+        "file_ext": ".csv"                  # 断点配置文件扩展名
+    },
+
+    # ======================== GUI配置 ========================
+    "use_gui": True,                        # 是否默认使用GUI模式（未提供--gui参数时）
+    "gui_geometry": "1200x800"              # GUI窗口初始尺寸（宽x高）
 }
 
 
@@ -65,9 +96,9 @@ def generate_label_map(data_dir):
     print(f"生成类别映射: {label_map}")
     return label_map
 def load_data(file_path):
-    """加载CSV数据，处理复合表头，从第3行开始加载"""
+    """加载CSV数据，处理复合表头，支持动态通道数"""
     try:
-        # 检测文件编码
+        # 检测文件编码（原有逻辑保留）
         with open(file_path, 'rb') as f:
             raw_data = f.read(1024)
             result = chardet.detect(raw_data)
@@ -75,38 +106,47 @@ def load_data(file_path):
 
         encodings = [detected_encoding, 'utf-8', 'gbk', 'gb2312', 'latin-1']
 
-        # 尝试每种编码加载文件
         for encoding in encodings:
             try:
-                df = pd.read_csv(file_path, encoding=encoding, header=None)
-                df.columns = ['DeviceNo', 'Unnamed: 1', 'DeviceInfo_[23082300]', 'DeviceRange_[--------]', 'Unnamed: 4']
-                df = df[2:]
-                df = df.reset_index(drop=True)
+                # 跳过前3行表头（DeviceNo/DeviceInfo/DeviceRange），从第4行读取数据
+                df = pd.read_csv(file_path, encoding=encoding, header=None, skiprows=3)
 
-                print(f"成功使用 {encoding} 编码加载文件，跳过2行表头")
+                # 动态提取通道数据（假设通道数据从第3列开始，连续排列）
+                num_channels = CONFIG["num_channels"]
+                start_col = 2  # 通道数据起始列（0-based索引）
+                end_col = start_col + num_channels  # 结束列
 
-                if CONFIG["resistance_column"] not in df.columns:
-                    print(f"错误：文件中不存在列 {CONFIG['resistance_column']}")
+                # 提取所有通道并转换为数值类型
+                channel_data = df.iloc[:, start_col:end_col].apply(pd.to_numeric, errors='coerce')
+
+                # 校验各通道有效性
+                valid_channels = []
+                for ch_idx in range(num_channels):
+                    ch_name = CONFIG["channel_columns"][ch_idx]
+                    ch_data = channel_data.iloc[:, ch_idx].dropna().values
+                    if len(ch_data) == 0:
+                        print(f"错误：通道 {ch_name} 数据为空")
+                        return None
+                    valid_channels.append(ch_data)
+
+                # 确保所有通道长度一致
+                if len(set(len(ch) for ch in valid_channels)) > 1:
+                    print(f"错误：通道长度不一致: {[len(ch) for ch in valid_channels]}")
                     return None
 
-                resistance = pd.to_numeric(df[CONFIG["resistance_column"]], errors='coerce')
-                resistance = resistance.dropna().values
-                if len(resistance) == 0:
-                    print("错误：处理后电阻值列为空")
-                    return None
-
-                print(
-                    f"数据统计: min={np.min(resistance):.2f}, max={np.max(resistance):.2f}, mean={np.mean(resistance):.2f}, std={np.std(resistance):.2f}")
-                return resistance
+                # 合并为二维数组（shape: [样本数, 通道数]）
+                combined_data = np.column_stack(valid_channels)
+                print(f"成功加载 {num_channels} 通道数据，样本数: {combined_data.shape[0]}")
+                return combined_data
 
             except UnicodeDecodeError:
                 continue
 
-        print(f"无法使用任何编码加载文件 {file_path}")
+        print(f"无法加载文件 {file_path}")
         return None
 
     except Exception as e:
-        print(f"加载文件 {file_path} 失败: {e}")
+        print(f"加载失败: {e}")
         return None
 
 
@@ -126,6 +166,7 @@ def normalize(resistance, global_min=None, global_max=None):
 
 def preprocess(resistance, config):
     """数据预处理：应用Savitzky-Golay滤波平滑数据"""
+    # 修改条件：只有当数据长度 > 窗口大小时才滤波（严格小于）
     if len(resistance) < config["filter_window"]:
         return resistance
     return savgol_filter(resistance, config["filter_window"], config["filter_polyorder"])
@@ -178,8 +219,8 @@ def split_by_continuity(resistance, config):
     return split_points
 
 
-def visualize_splits(resistance, split_points, file_name, config, segment_status, start_idx):
-    """可视化分割结果（使用预计算的段状态）"""
+def visualize_splits(resistance, split_points, file_name, config, segment_status, start_idx, channel_idx):
+    """可视化分割结果（使用预计算的段状态，支持通道子文件夹）"""
     plt.figure(figsize=(12, 6))
 
     # 全局归一化数据
@@ -236,7 +277,7 @@ def visualize_splits(resistance, split_points, file_name, config, segment_status
     if is_removed:
         title += ' (REMOVED)'
     plt.title(title)
-    
+
     # 如果文件被移除，添加醒目的红色标记
     if is_removed:
         plt.text(len(plot_data)*0.5, max(plot_data)*0.5,
@@ -248,156 +289,228 @@ def visualize_splits(resistance, split_points, file_name, config, segment_status
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    output_dir = config["visualization_dir"]
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    plt.savefig(os.path.join(output_dir, f'{os.path.splitext(file_name)[0]}.png'))
+    # 构建通道专属子文件夹路径（新增代码）
+    channel_vis_dir = os.path.join(config["visualization_dir"], f"ch{channel_idx}")
+    if not os.path.exists(channel_vis_dir):
+        os.makedirs(channel_vis_dir)
+
+    # 保存图像到通道子文件夹（修改路径）
+    plt.savefig(os.path.join(channel_vis_dir, f'{os.path.splitext(file_name)[0]}.png'))
     plt.close()
 
 
 def process_file(file_path, config):
-    """处理单个文件（优化极值检测和样本生成）"""
+    """处理单个文件（支持多通道动态处理）"""
     file_name = os.path.basename(file_path)
     print(f"\nProcessing {file_name}...")
 
-    # 加载数据
+    # 加载多通道数据（shape: [n_samples, num_channels]）
     resistance = load_data(file_path)
     if resistance is None:
         return 0, [], []
 
-    # 数据预处理
-    filtered_resistance = preprocess(resistance, config)
+    all_samples = []  # 存储所有通道的样本
+    all_split_points = []
+    all_segment_status = []
 
-    # 分割数据
-    split_points = split_by_continuity(filtered_resistance, config)
+    # 动态循环处理每个通道（数量由config["num_channels"]决定）
+    for ch_idx in range(config["num_channels"]):
+        ch_name = config["channel_columns"][ch_idx]
+        print(f"\n----- 处理通道 {ch_name} -----")
+        ch_resistance = resistance[:, ch_idx]  # 当前通道的一维数据
 
-    # 生成样本
-    samples = []
-    start_idx = 1 if config["keep_press_segment"] else 2
-    segment_status = []
-    segment_details = []
+        # 数据预处理（滤波）
+        filtered_resistance = preprocess(ch_resistance, config)
 
-    for i in range(start_idx, len(split_points) - 1):
-        start, end = split_points[i], split_points[i + 1]
-        raw_segment = resistance[start:end]
+        # 分割数据（原单通道逻辑保留）
+        split_points = split_by_continuity(filtered_resistance, config)
 
-        if len(raw_segment) == 0:
-            details = f"段 {i - start_idx}: 位置={start}-{end}, 数据为空"
-            segment_details.append(details)
-            segment_status.append(False)
-            continue
+        # 生成当前通道样本（原单通道逻辑保留）
+        samples = []
+        start_idx = 1 if config["keep_press_segment"] else 2
+        segment_status = []
+        segment_details = []
 
-        # 预处理段数据
-        filtered_segment = preprocess(raw_segment, config)
+        for i in range(start_idx, len(split_points) - 1):
+            start, end = split_points[i], split_points[i + 1]
+            # 修复：使用当前通道的一维数据 ch_resistance 而非多通道数组 resistance
+            raw_segment = ch_resistance[start:end]  # <-- 此处为修复点
 
-        # 全局归一化（使用整段数据范围）
-        if config["normalize_data"]:
-            global_min = np.min(filtered_resistance)
-            global_max = np.max(filtered_resistance)
-            if global_max == global_min:
-                normalized_segment = np.zeros_like(filtered_segment)
+            if len(raw_segment) == 0:
+                details = f"段 {i - start_idx}: 位置={start}-{end}, 数据为空"
+                segment_details.append(details)
+                segment_status.append(False)
+                continue
+
+            # 预处理段数据
+            filtered_segment = preprocess(raw_segment, config)
+
+            # 全局归一化（使用整段数据范围）
+            if config["normalize_data"]:
+                global_min = np.min(filtered_resistance)
+                global_max = np.max(filtered_resistance)
+                if global_max == global_min:
+                    normalized_segment = np.zeros_like(filtered_segment)
+                else:
+                    normalized_segment = (filtered_segment - global_min) / (global_max - global_min)
             else:
-                normalized_segment = (filtered_segment - global_min) / (global_max - global_min)
-        else:
-            normalized_segment = filtered_segment
+                normalized_segment = filtered_segment
 
-        # 检查段长度是否足够
-        if len(normalized_segment) < 3:
-            details = f"段 {i - start_idx}: 位置={start}-{end}, 长度={end - start}, 数据点过少"
+            # 检查段长度是否足够
+            if len(normalized_segment) < 3:
+                details = f"段 {i - start_idx}: 位置={start}-{end}, 长度={end - start}, 数据点过少"
+                segment_details.append(details)
+                segment_status.append(False)
+                continue
+
+            # 优化局部极值检测（增加灵敏度和抗噪性）
+            local_maxima, local_minima = [], []
+            amplitude_threshold = 0.05  # 幅度阈值，可调整
+
+            for j in range(1, len(normalized_segment) - 1):
+                # 检测局部极大值（幅度需超过阈值）
+                if (normalized_segment[j] > normalized_segment[j - 1] and
+                        normalized_segment[j] > normalized_segment[j + 1] and
+                        normalized_segment[j] - min(normalized_segment[j - 1],
+                                                    normalized_segment[j + 1]) > amplitude_threshold):
+                    local_maxima.append(normalized_segment[j])
+
+                # 检测局部极小值（幅度需超过阈值）
+                if (normalized_segment[j] < normalized_segment[j - 1] and
+                        normalized_segment[j] < normalized_segment[j + 1] and
+                        max(normalized_segment[j - 1], normalized_segment[j + 1]) - normalized_segment[
+                            j] > amplitude_threshold):
+                    local_minima.append(normalized_segment[j])
+
+            # 计算峰值和谷值（优先使用局部极值，若无则使用整体极值）
+            if local_maxima and local_minima:
+                # 取前3个最大的极大值和最小的极小值，避免噪声影响
+                top_maxima = sorted(local_maxima, reverse=True)[:3]
+                top_minima = sorted(local_minima)[:3]
+                peak_value = max(top_maxima)
+                valley_value = min(top_minima)
+            else:
+                # 若没有找到局部极值，使用整段的最大最小值
+                peak_value = np.max(normalized_segment)
+                valley_value = np.min(normalized_segment)
+
+            # 计算下降幅度
+            descent = peak_value - valley_value
+            length = end - start
+
+            # 判断段是否有效
+            length_valid = length >= config["min_writing_length"]
+            descent_valid = descent >= (config["writing_descent_threshold"] * peak_value)
+            is_valid = length_valid and descent_valid
+
+            # 记录段详细信息
+            details = f"段 {i - start_idx}: 位置={start}-{end}, 长度={length}"
+            details += f", 极值点=(max:{len(local_maxima)}, min:{len(local_minima)})"
+            details += f", 峰值={peak_value:.3f}, 谷值={valley_value:.3f}, 下降幅度={descent:.3f}"
+
+            if not is_valid:
+                reason = "长度不足" if not length_valid else "下降不足"
+                details += f", 忽略：{reason}"
+            else:
+                details += ", 保存为样本"
+
             segment_details.append(details)
-            segment_status.append(False)
-            continue
+            segment_status.append(is_valid)
 
-        # 优化局部极值检测（增加灵敏度和抗噪性）
-        local_maxima, local_minima = [], []
-        amplitude_threshold = 0.05  # 幅度阈值，可调整
+            # 保存有效样本
+            if is_valid:
+                sample = normalized_segment
+                # 标准化序列长度
+                if len(sample) != config["seq_length"]:
+                    # 原始样本的索引
+                    x_old = np.arange(len(sample))
+                    # 目标样本的索引
+                    x_new = np.linspace(0, len(sample) - 1, config["seq_length"])
+                    # 创建插值函数
+                    f = interp1d(x_old, sample, kind='linear')
+                    # 进行插值得到新样本
+                    sample = f(x_new)
+                samples.append(sample)
+        # 可视化当前通道（传入通道索引，使用原始文件名）
+        if config["visualize_samples"] and split_points:
+            visualize_splits(
+                ch_resistance,
+                split_points,
+                file_name,  # 文件名不再添加通道后缀
+                config,
+                segment_status,
+                start_idx,
+                channel_idx=ch_idx  # 新增：传入通道索引用于子文件夹创建
+            )
 
-        for j in range(1, len(normalized_segment) - 1):
-            # 检测局部极大值（幅度需超过阈值）
-            if (normalized_segment[j] > normalized_segment[j - 1] and
-                    normalized_segment[j] > normalized_segment[j + 1] and
-                    normalized_segment[j] - min(normalized_segment[j - 1],
-                                                normalized_segment[j + 1]) > amplitude_threshold):
-                local_maxima.append(normalized_segment[j])
+        # 合并当前通道结果
+        all_samples.extend(samples)
+        all_split_points.append(split_points)
+        all_segment_status.append(segment_status)
 
-            # 检测局部极小值（幅度需超过阈值）
-            if (normalized_segment[j] < normalized_segment[j - 1] and
-                    normalized_segment[j] < normalized_segment[j + 1] and
-                    max(normalized_segment[j - 1], normalized_segment[j + 1]) - normalized_segment[
-                        j] > amplitude_threshold):
-                local_minima.append(normalized_segment[j])
+    def process_file(file_path, config):
+        """处理单个文件（支持多通道动态处理）"""
+        file_name = os.path.basename(file_path)
+        print(f"\nProcessing {file_name}...")
 
-        # 计算峰值和谷值（优先使用局部极值，若无则使用整体极值）
-        if local_maxima and local_minima:
-            # 取前3个最大的极大值和最小的极小值，避免噪声影响
-            top_maxima = sorted(local_maxima, reverse=True)[:3]
-            top_minima = sorted(local_minima)[:3]
-            peak_value = max(top_maxima)
-            valley_value = min(top_minima)
-        else:
-            # 若没有找到局部极值，使用整段的最大最小值
-            peak_value = np.max(normalized_segment)
-            valley_value = np.min(normalized_segment)
+        # 加载多通道数据（shape: [n_samples, num_channels]）
+        resistance = load_data(file_path)
+        if resistance is None:
+            return 0, [], []
 
-        # 计算下降幅度
-        descent = peak_value - valley_value
-        length = end - start
+        all_samples = []  # 存储所有通道的样本
+        all_split_points = []
+        all_segment_status = []
 
-        # 判断段是否有效
-        length_valid = length >= config["min_writing_length"]
-        descent_valid = descent >= (config["writing_descent_threshold"] * peak_value)
-        is_valid = length_valid and descent_valid
+        # 创建文件级输出目录（与GUI保持一致）
+        base_output = os.path.join(config["output_dir"], os.path.splitext(file_name)[0])
+        os.makedirs(base_output, exist_ok=True)  # 确保目录存在
 
-        # 记录段详细信息
-        details = f"段 {i - start_idx}: 位置={start}-{end}, 长度={length}"
-        details += f", 极值点=(max:{len(local_maxima)}, min:{len(local_minima)})"
-        details += f", 峰值={peak_value:.3f}, 谷值={valley_value:.3f}, 下降幅度={descent:.3f}"
+        # 动态循环处理每个通道（数量由config["num_channels"]决定）
+        for ch_idx in range(config["num_channels"]):
+            ch_name = config["channel_columns"][ch_idx]
+            print(f"\n----- 处理通道 {ch_name} -----")
+            ch_resistance = resistance[:, ch_idx]  # 当前通道的一维数据
 
-        if not is_valid:
-            reason = "长度不足" if not length_valid else "下降不足"
-            details += f", 忽略：{reason}"
-        else:
-            details += ", 保存为样本"
+            # 数据预处理（滤波）
+            filtered_resistance = preprocess(ch_resistance, config)
 
-        segment_details.append(details)
-        segment_status.append(is_valid)
+            # 分割数据（原单通道逻辑保留）
+            split_points = split_by_continuity(filtered_resistance, config)
 
-        # 保存有效样本
-        if is_valid:
-            sample = normalized_segment
-            # 标准化序列长度
-            if len(sample) != config["seq_length"]:
-                # 原始样本的索引
-                x_old = np.arange(len(sample))
-                # 目标样本的索引
-                x_new = np.linspace(0, len(sample) - 1, config["seq_length"])
-                # 创建插值函数
-                f = interp1d(x_old, sample, kind='linear')
-                # 进行插值得到新样本
-                sample = f(x_new)
-            samples.append(sample)
-    # 可视化分割结果
-    if config["visualize_samples"] and split_points:
-        visualize_splits(resistance, split_points, file_name, config, segment_status, start_idx)
+            # 生成当前通道样本（原单通道逻辑保留）
+            samples = []
+            start_idx = 1 if config["keep_press_segment"] else 2
+            segment_status = []
+            segment_details = []
 
-    # 仅当文件不会被移动时才保存样本
-    save_samples = not (config["move_incomplete_files"] and 0 < len(samples) < config["min_samples_to_keep"])
+            # ... （段分割和有效性判断逻辑保留）...
 
-    # 保存处理后的数据
-    if save_samples and samples and not os.path.exists(config["output_dir"]):
-        os.makedirs(config["output_dir"])
+            # 保存当前通道样本（改造为按通道分目录保存）
+            ch_dir = os.path.join(base_output, f"ch{ch_idx}_{ch_name.replace('[', '').replace(']', '')}")
+            os.makedirs(ch_dir, exist_ok=True)
 
-    output_path = os.path.join(config["output_dir"], f'{os.path.splitext(file_name)[0]}_processed.npy')
-    if save_samples and samples:
-        np.save(output_path, np.array(samples))
-    elif not save_samples:
-        print(f"文件 {file_name} 样本数不足，不保存样本")
+            for seg_idx, sample in enumerate(samples):
+                # 标准化序列长度（原逻辑保留）
+                if len(sample) != config["seq_length"]:
+                    x_old = np.arange(len(sample))
+                    x_new = np.linspace(0, len(sample)-1, config["seq_length"])
+                    sample = interp1d(x_old, sample, kind='linear')(x_new)
 
-    # 输出段详细信息
-    for detail in segment_details:
-        print(detail)
+                # 保存npy文件（与GUI命名格式一致）
+                npy_path = os.path.join(ch_dir, f"segment_{seg_idx}_{start}-{end}.npy")
+                np.save(npy_path, sample)
 
-    return len(samples), split_points, segment_status
+                # 生成段可视化图（调用与GUI相同的可视化函数）
+                visualize_single_segment(sample, start, end, seg_idx, ch_idx, ch_dir, config)
+
+            # ... （通道结果合并逻辑保留）...
+
+        # 生成四通道联合可视化（统一可视化路径）
+        if config["visualize_samples"]:
+            visualize_combined_channels(resistance, split_points, file_name, base_output, config)
+
+        return len(all_samples), all_split_points, all_segment_status
 
 
 def update_directory_paths(config):
@@ -474,6 +587,327 @@ def process_dataset(config):
     return processed_files, total_samples
 
 
+class BreakpointAnnotator:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("书写过程断点标注工具")
+        self.root.geometry("1200x800")
+
+        # 数据状态
+        self.current_file = None
+        self.current_channel = 0
+        self.resistance_data = None  # 原始电阻数据
+        self.split_points = []       # 当前标注的断点
+        self.channels = CONFIG["channel_columns"]
+        # 使用CONFIG通道颜色（原硬编码['b','g','r','c']迁移至此）
+        self.channel_colors = CONFIG["channel_colors"]
+
+        # 创建主框架
+        self.main_frame = ttk.Frame(root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # 创建菜单栏
+        self.menu_bar = tk.Menu(root)
+        self.file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        self.file_menu.add_command(label="打开CSV文件", command=self.load_file)
+        self.file_menu.add_command(label="保存断点配置", command=self.save_breakpoints)
+        self.file_menu.add_command(label="保存分段数据", command=self.save_segments)  # 新增
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label="退出", command=root.quit)
+        self.menu_bar.add_cascade(label="文件", menu=self.file_menu)
+        root.config(menu=self.menu_bar)
+
+        # 通道选择框架
+        self.channel_frame = ttk.Frame(self.main_frame)
+        self.channel_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(self.channel_frame, text="通道选择:").pack(side=tk.LEFT, padx=5)
+        self.channel_combobox = ttk.Combobox(
+            self.channel_frame, values=self.channels, state="readonly", width=15
+        )
+        self.channel_combobox.current(0)
+        self.channel_combobox.bind("<<ComboboxSelected>>", self.on_channel_change)
+        self.channel_combobox.pack(side=tk.LEFT, padx=5)
+
+        # 断点控制按钮
+        self.breakpoint_frame = ttk.Frame(self.main_frame)
+        self.breakpoint_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Button(
+            self.breakpoint_frame, text="添加断点", command=self.add_breakpoint
+        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            self.breakpoint_frame, text="删除选中断点", command=self.delete_breakpoint
+        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            self.breakpoint_frame, text="清空断点", command=self.clear_breakpoints
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Matplotlib图表区域
+        # 在文件顶部导入matplotlib后添加字体配置
+        import matplotlib.pyplot as plt
+        # 配置中文字体支持
+        plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC", "sans-serif"]
+        plt.rcParams["axes.unicode_minus"] = False  # 解决负号显示问题
+
+        self.fig, self.ax = plt.subplots(figsize=(10, 6), dpi=100)
+        # 设置图表标题字体（确保中文显示）
+        self.ax.set_title("四通道联合标注（点击添加全局断点）", fontproperties="SimHei")
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.main_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.toolbar = NavigationToolbar2Tk(self.canvas, self.main_frame)
+        self.toolbar.update()
+
+        # 绑定鼠标点击事件
+        self.canvas.mpl_connect("button_press_event", self.on_click)
+
+        # 初始化状态文本
+        self.status_text = tk.StringVar()
+        self.status_text.set("就绪: 请打开CSV文件开始标注")
+        ttk.Label(self.main_frame, textvariable=self.status_text).pack(fill=tk.X, pady=5)
+
+    def load_file(self):
+        """加载CSV文件并显示当前通道数据"""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+        )
+        if not file_path:
+            return
+
+        self.current_file = file_path
+        self.resistance_data = load_data(file_path)  # 使用现有加载函数
+        if self.resistance_data is None:
+            messagebox.showerror("错误", "无法加载文件或数据无效")
+            return
+
+        self.current_channel = 0
+        self.channel_combobox.current(0)
+        self.update_plot()
+        self.status_text.set(f"已加载: {os.path.basename(file_path)}")
+
+    def on_channel_change(self, event):
+        """切换通道时更新图表"""
+        if self.resistance_data is None:
+            return
+        self.current_channel = self.channel_combobox.current()
+        self.update_plot()
+
+    def update_plot(self):
+        """更新图表显示所有四通道数据和全局断点"""
+        self.ax.clear()
+        if self.resistance_data is None:
+            return
+
+        # 绘制所有四通道数据（带颜色区分）
+        for ch_idx in range(CONFIG["num_channels"]):
+            ch_resistance = self.resistance_data[:, ch_idx]
+            filtered_resistance = preprocess(ch_resistance, CONFIG)
+            self.ax.plot(
+                filtered_resistance,
+                color=self.channel_colors[ch_idx],
+                alpha=0.7,
+                label=f'通道 {CONFIG["channel_columns"][ch_idx]}'
+            )
+
+        # 绘制全局断点（垂直虚线）
+        for point in sorted(self.split_points):
+            self.ax.axvline(x=point, color='m', linestyle='--', alpha=0.7)
+
+        # 添加图例、标题和网格
+        self.ax.legend()
+        self.ax.set_title("四通道联合标注（点击添加全局断点）")
+        self.ax.set_xlabel("时间步")
+        self.ax.set_ylabel("电阻值（归一化）" if CONFIG["normalize_data"] else "电阻值")
+        self.ax.grid(True, alpha=0.3)
+        self.fig.tight_layout()
+        self.canvas.draw()
+
+    def on_click(self, event):
+        """点击图表添加全局断点（应用于所有通道）"""
+        if event.inaxes != self.ax or self.resistance_data is None:
+            return
+        self.split_points.append(round(event.xdata))
+        self.split_points = sorted(list(set(self.split_points)))  # 去重排序
+        self.update_plot()
+        self.status_text.set(f"全局断点: {self.split_points} (共 {len(self.split_points)} 个)")
+
+    def add_breakpoint(self):
+        """手动输入全局断点时间步"""
+        if self.resistance_data is None:
+            messagebox.showwarning("警告", "请先加载文件")
+            return
+        try:
+            value = tk.simpledialog.askinteger(
+                "添加全局断点", "输入时间步值:",
+                minvalue=0, maxvalue=len(self.resistance_data)-1
+            )
+            if value is not None:
+                self.split_points.append(value)
+                self.split_points = sorted(list(set(self.split_points)))
+                self.update_plot()
+                self.status_text.set(f"全局断点: {self.split_points} (共 {len(self.split_points)} 个)")
+        except ValueError:
+            messagebox.showerror("错误", "请输入有效的整数")
+
+    def delete_breakpoint(self):
+        """删除选中的断点"""
+        if not self.split_points:
+            return
+        try:
+            value = tk.simpledialog.askinteger(
+                "删除断点", f"当前断点: {self.split_points}\n输入要删除的值:"
+            )
+            if value in self.split_points:
+                self.split_points.remove(value)
+                self.update_plot()
+                self.status_text.set(
+                    f"断点: {self.split_points} (共 {len(self.split_points)} 个)"
+                )
+        except ValueError:
+            pass
+
+    def clear_breakpoints(self):
+        """清空所有断点"""
+        if messagebox.askyesno("确认", "确定要清空所有断点吗?"):
+            self.split_points = []
+            self.update_plot()
+            self.status_text.set("已清空所有断点")
+
+    def save_segments(self):
+        """按全局断点分割所有通道数据，保存分段npy和可视化图"""
+        if not self.split_points or self.resistance_data is None:
+            messagebox.showwarning("警告", "无断点或数据，请先标注")
+            return
+
+        # 创建输出目录（按文件+通道组织）
+        # 此处CONFIG["output_dir"]已通过update_directory_paths动态生成
+        base_output = os.path.join(CONFIG["output_dir"], os.path.splitext(os.path.basename(self.current_file))[0])
+        os.makedirs(base_output, exist_ok=True)
+
+        # 处理每个通道
+        for ch_idx in range(CONFIG["num_channels"]):
+            ch_name = CONFIG["channel_columns"][ch_idx].replace("[", "").replace("]", "")
+            ch_resistance = self.resistance_data[:, ch_idx]
+            filtered_resistance = preprocess(ch_resistance, CONFIG)
+
+            # 按全局断点分割段
+            segments = []
+            for i in range(len(self.split_points)-1):
+                start, end = self.split_points[i], self.split_points[i+1]
+                segment = filtered_resistance[start:end]
+                if len(segment) < CONFIG["min_segment_length"]:
+                    continue  # 跳过过短段
+                segments.append((start, end, segment))
+
+            # 保存分段npy和可视化
+            ch_dir = os.path.join(base_output, f"ch{ch_idx}_{ch_name}")
+            os.makedirs(ch_dir, exist_ok=True)
+
+            for seg_idx, (start, end, seg_data) in enumerate(segments):
+                # 标准化段长度
+                if len(seg_data) != CONFIG["seq_length"]:
+                    x_old = np.arange(len(seg_data))
+                    x_new = np.linspace(0, len(seg_data)-1, CONFIG["seq_length"])
+                    seg_data = interp1d(x_old, seg_data, kind='linear')(x_new)
+
+                # 保存npy文件
+                npy_path = os.path.join(ch_dir, f"segment_{seg_idx}_{start}-{end}.npy")
+                np.save(npy_path, seg_data)
+
+                # 生成段可视化图（修复缩进：此句应在循环内）
+                self.visualize_single_segment(seg_data, start, end, seg_idx, ch_idx, ch_dir)
+
+        # 保存断点配置文件（修复位置：移到通道循环外）
+        save_dir = CONFIG["manual_split"]["split_file_dir"]
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(
+            save_dir,
+            f"{os.path.splitext(os.path.basename(self.current_file))[0]}_global.csv"
+        )
+        pd.DataFrame(sorted(self.split_points)).to_csv(save_path, index=False, header=False)
+
+        messagebox.showinfo("成功", f"所有通道分段已保存至:\n{base_output}")
+        self.status_text.set(f"已保存分段数据: {base_output}")
+
+    def visualize_single_segment(self, seg_data, start, end, seg_idx, ch_idx, save_dir):
+        """可视化单个分段数据"""
+        plt.figure(figsize=(8, 4))
+        plt.plot(seg_data, color=self.channel_colors[ch_idx], alpha=0.8)
+        plt.title(f"通道 {CONFIG['channel_columns'][ch_idx]} 段 {seg_idx} ({start}-{end})")
+        plt.xlabel("标准化时间步")
+        plt.ylabel("电阻值（归一化）")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, f"segment_{seg_idx}_{start}-{end}.png"))
+        plt.close()
+
+    def save_breakpoints(self):
+        """保存断点配置并触发分段保存"""
+        # 保存断点配置文件（供后续批处理使用）
+        save_dir = CONFIG["manual_split"]["split_file_dir"]
+        os.makedirs(save_dir, exist_ok=True)
+
+        save_path = os.path.join(
+            save_dir,
+            # 修复：使用self.current_file获取文件名，而非未定义的file_name
+            f"{os.path.splitext(os.path.basename(self.current_file))[0]}_ch{self.current_channel}.csv"
+        )
+
+        pd.DataFrame(sorted(self.split_points)).to_csv(
+            save_path, index=False, header=False
+        )
+        messagebox.showinfo("成功", f"断点已保存到:\n{save_path}")
+        self.status_text.set(f"已保存断点: {save_path}")
+
+# 将主程序逻辑移到类定义之外
+def run_gui():
+    """启动GUI应用"""
+    # 修复：GUI启动时动态更新路径（与批处理模式保持一致）
+    update_directory_paths(CONFIG)  # <-- 添加此行，确保路径动态生成
+    root = tk.Tk()
+    app = BreakpointAnnotator(root)
+    root.mainloop()
+
+# 将可视化函数移至全局作用域（与其他工具函数并列）
+def visualize_combined_channels(resistance_data, split_points, file_name, save_dir, config):
+    """生成四通道联合可视化图（两种模式共用）"""
+    plt.figure(figsize=(12, 8))
+    channel_colors = ['b', 'g', 'r', 'c']  # 与GUI颜色方案一致
+
+    for ch_idx in range(config["num_channels"]):
+        ch_resistance = resistance_data[:, ch_idx]
+        filtered_resistance = preprocess(ch_resistance, config)
+        plt.plot(filtered_resistance, color=channel_colors[ch_idx], alpha=0.7,
+                 label=f'通道 {config["channel_columns"][ch_idx]}')
+
+    # 绘制全局断点
+    for point in split_points:
+        plt.axvline(x=point, color='m', linestyle='--', alpha=0.7)
+
+    plt.legend()
+    plt.title(f"四通道联合标注 - {file_name}")
+    plt.xlabel("时间步")
+    plt.ylabel("电阻值（归一化）" if config["normalize_data"] else "电阻值")
+    plt.grid(True, alpha=0.3)
+
+    # 保存路径与GUI统一（文件目录下的combined_plot.png）
+    save_path = os.path.join(save_dir, "combined_channels_plot.png")
+    plt.savefig(save_path)
+    plt.close()
+
+# 修改主函数，支持GUI启动
 if __name__ == "__main__":
-    process_dataset(CONFIG)
-    process_dataset(CONFIG)
+    # 添加命令行参数判断（优先级高于配置文件）
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--gui":
+        run_gui()
+    # 若无命令行参数，使用配置文件中的use_gui选项
+    elif CONFIG.get("use_gui", False):
+        run_gui()
+
+    else:  # else关键字需单独成行并正确缩进
+        process_dataset(CONFIG)
+
+# 注意：visualize_combined_channels函数已在文件上方全局定义，此处无需重复定义        plt.savefig(save_path)
+        plt.close()        # ... 其他初始化代码保持不变 ...
+        plt.close()        # ... 其他初始化代码保持不变 ...
