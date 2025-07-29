@@ -39,6 +39,10 @@ class ImageManagerApp:
         self.delete_btn = ttk.Button(self.toolbar, text="删除当前图片及NPY", command=self.delete_current_files, state=tk.DISABLED)
         self.delete_btn.pack(side=tk.LEFT, padx=5)
 
+        # 上一张按钮
+        self.prev_btn = ttk.Button(self.toolbar, text="上一张图片", command=self.previous_image, state=tk.DISABLED)
+        self.prev_btn.pack(side=tk.LEFT, padx=5)
+
         # 下一张按钮
         self.next_btn = ttk.Button(self.toolbar, text="下一张图片", command=self.next_image, state=tk.DISABLED)
         self.next_btn.pack(side=tk.LEFT, padx=5)
@@ -215,6 +219,11 @@ class ImageManagerApp:
             except Exception as e:
                 messagebox.showerror("错误", f"删除文件时出错:\n{str(e)}")
 
+    def previous_image(self):
+        if self.image_names:
+            self.current_index = (self.current_index - 1) % len(self.image_names)
+            self.display_current_images()
+
     def next_image(self):
         if self.image_names:
             self.current_index = (self.current_index + 1) % len(self.image_names)
@@ -224,6 +233,7 @@ class ImageManagerApp:
         # 更新按钮状态
         has_images = len(self.image_names) > 0
         self.delete_btn.config(state=tk.NORMAL if has_images else tk.DISABLED)
+        self.prev_btn.config(state=tk.NORMAL if has_images else tk.DISABLED)
         self.next_btn.config(state=tk.NORMAL if has_images else tk.DISABLED)
 
 if __name__ == "__main__":
