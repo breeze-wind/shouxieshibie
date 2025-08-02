@@ -10,10 +10,10 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 # === 预测配置 ===
 PREDICT_CONFIG = {
-    "model_path": "models/test_bk/best_model.h5",  # 模型路径
-    "processed_dir": "predict_samples/bk/yuce"
+    "model_path": "models/data/ying/best_model.h5",  # 模型路径
+    "processed_dir": "predict_samples/data/tra/a_tian"
                      ,  # 处理后NPY目录
-    "output_dir": "prediction_results/2.0.7/bk/yuce",  # 预测结果保存目录
+    "output_dir": "prediction_results/2.0.7/data/tra/a_tian",  # 预测结果保存目录
     "seq_length": 50,  # 序列长度
     "global_normalization": True,  # 使用全局归一化
     # 原有配置保持不变
@@ -120,19 +120,34 @@ def main():
         file_path = os.path.join(processed_dir, file)
         print(f"\n处理NPY文件: {file}")
 
+        # 修改预测脚本的数据处理部分（约119-136行）
         try:
             samples = np.load(file_path)
-            print(f"加载 {len(samples)} 个样本")
+            print(f"加载数据形状: {samples.shape}")
 
-            for idx, sample in enumerate(samples):
-                # 应用标准化
-                sample_2d = sample.reshape(1, -1)  # 调整为 (1, 50) 形状
+            # 统一形状处理逻辑（与训练脚本保持一致）
+            if samples.ndim == 1:
+                samples = samples.reshape(1, -1)  # 单个样本 (1, 50)
+            elif samples.ndim == 2 and samples.shape[1] != PREDICT_CONFIG["seq_length"]:
+                samples = samples.T  # 转置错误的维度
+
+            # 添加与训练脚本相同的校验
+            if samples.shape[1] != PREDICT_CONFIG["seq_length"]:
+                raise ValueError(f"序列长度{samples.shape[1]}不匹配配置的{PREDICT_CONFIG['seq_length']}")
+
+            print(f"有效样本数: {samples.shape[0]}")
+
+            for idx in range(samples.shape[0]):
+                # 保持与训练时相同的二维标准化输入
+                sample_2d = samples[idx].reshape(1, -1)
                 sample_scaled = scaler.transform(sample_2d)
-                sample = sample_scaled.reshape(-1, 1)  # 恢复为 (50, 1) 形状
+
+                # 统一模型输入形状 (1, seq_length, 1)
+                model_input = sample_scaled.reshape(1, PREDICT_CONFIG["seq_length"], 1)
 
                 # 执行预测
                 predicted_class, class_name, confidence, predictions = predict_sample(
-                    model, sample, idx_to_label
+                    model, model_input, idx_to_label
                 )
 
                 # 输出预测结果
@@ -140,9 +155,17 @@ def main():
                 print(f"  样本 {idx+1}/{len(samples)} - 置信度: {confidence:.2f}%")
                 print(f"  样本 {idx+1}/{len(samples)} - 各类别概率: {np.round(predictions, 3)}")
 
-                # 生成可视化图表
-                visualize_prediction(sample, predictions, class_name, confidence, file, idx,
-                                    PREDICT_CONFIG["output_dir"], idx_to_label)
+                # 生成可视化图表（删除重复调用）
+                visualize_prediction(
+                    sample_scaled.flatten(),  # 使用标准化后的数据
+                    predictions,
+                    class_name,
+                    confidence,
+                    file,
+                    idx,
+                    PREDICT_CONFIG["output_dir"],
+                    idx_to_label
+                )
 
             total_predicted += len(samples)
 

@@ -15,16 +15,17 @@ import joblib
 
 # === 配置参数 ===
 CONFIG = {
-    "data_dir": "processed_data/test/bk",  # 处理后样本目录
-    "model_dir": "models/test_bk",  # 模型保存目录
+    "data_dir": "processed_data/data/ying",  # 处理后样本目录
+    "model_dir": "models/data/ying",  # 模型保存目录
     "seq_length": 50,  # 统一序列长度
-    "batch_size": 16,  # 训练批次大小
+    "batch_size": 64,  # 训练批次大小
     "epochs": 500,  # 最大训练轮数
-    "n_classes": 5,  # 分类类别数（需根据实际数据修改）
+    "n_classes": 26,  # 分类类别数（需根据实际数据修改）
     # 添加校验参数
     "min_seq_length": 50,
     "max_seq_length": 1000,
     "use_lstm": True,  # 新增LSTM开关配置
+    "n_channels": 4,  # 新增通道数配置
 }
 
 
@@ -33,68 +34,93 @@ def load_processed_data(data_dir, seq_length=None):
     """加载处理后的样本数据及标签"""
     all_samples = []
     all_labels = []
-    label_counter = 0
     label_map = {}
 
-    # 假设目录结构为: data_dir/label_XXX/*.npy
-    label_dirs = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
+    # 获取第一层目录作为标签
+    label_dirs = [d for d in os.listdir(data_dir)
+                 if os.path.isdir(os.path.join(data_dir, d))]
 
     if not label_dirs:
-        # 若没有子目录，假设所有.npy文件属于同一类别
+        # 若没有子目录，使用当前目录名作为标签
+        current_dir = os.path.basename(data_dir.rstrip('/'))
+        label_map[current_dir] = 0
         label_dirs = [data_dir]
-        label_map[data_dir] = 0
-        label_counter = 1
+    else:
+        # 建立标签映射
+        label_map = {label: idx for idx, label in enumerate(sorted(label_dirs))}
 
-    for label_dir in label_dirs:
-        full_path = os.path.join(data_dir, label_dir)
-        if not os.path.isdir(full_path):
-            continue
+    # 递归读取所有子目录中的npy文件
+    for label in label_map:
+        label_path = os.path.join(data_dir, label)
 
-        # 为当前标签分配索引
-        if label_dir not in label_map:
-            label_map[label_dir] = label_counter
-            label_counter += 1
+        # 添加样本计数器
+        label_sample_count = 0
 
-        # 加载所有样本文件
-        for file in os.listdir(full_path):
-            if file.endswith("_processed.npy"):
-                file_path = os.path.join(full_path, file)
-                try:
-                    samples = np.load(file_path)
-                    all_samples.append(samples)
-                    all_labels.extend([label_map[label_dir]] * len(samples))
-                except Exception as e:
-                    print(f"加载样本文件 {file_path} 失败: {e}")
+        # 递归遍历所有子目录
+        for root, dirs, files in os.walk(label_path):
+            for file in files:
+                if file.endswith('.npy'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        # 加载numpy数组
+                        samples = np.load(file_path)
 
-    if not all_samples:
-        raise ValueError(f"在 {data_dir} 中未找到有效样本文件")
+                        # 添加维度校验
+                        if samples.ndim == 0:
+                            raise ValueError(f"文件 {file_path} 包含标量数据")
 
+                        # 修正样本处理逻辑
+                        if samples.ndim == 2:
+                            # 单个样本 (seq_length, channels)
+                            if samples.shape[0] != CONFIG["seq_length"] or samples.shape[1] != CONFIG["n_channels"]:
+                                raise ValueError(f"文件 {file_path} 形状不匹配: {samples.shape} != ({CONFIG['seq_length']}, {CONFIG['n_channels']})")
+                            all_samples.append(samples)
+                            all_labels.append(label_map[label])
+                            label_sample_count += 1
+                        elif samples.ndim == 3:
+                            # 批量样本 (n_samples, seq_length, channels)
+                            for sample in samples:
+                                if sample.shape[0] != CONFIG["seq_length"] or sample.shape[1] != CONFIG["n_channels"]:
+                                    raise ValueError(f"文件 {file_path} 中样本形状不匹配: {sample.shape} != ({CONFIG['seq_length']}, {CONFIG['n_channels']})")
+                                all_samples.append(sample)
+                                all_labels.append(label_map[label])
+                                label_sample_count += 1
+                        else:
+                            raise ValueError(f"文件 {file_path} 维度异常: {samples.ndim}")
+
+                    except Exception as e:
+                        print(f"加载样本文件 {file_path} 失败: {e}")
+
+        # 添加类别样本数统计
+        print(f"类别 {label} 加载样本数: {label_sample_count}")
+
+    # 保持训练脚本的现有处理逻辑（约73-81行）
     # 合并所有样本
-    X = np.concatenate(all_samples, axis=0)
+    X = np.stack(all_samples, axis=0)
     y = np.array(all_labels)
 
-    # 添加长度校验
+    # 添加长度校验（保持原校验逻辑不变）
     if seq_length < CONFIG["min_seq_length"] or seq_length > CONFIG["max_seq_length"]:
         raise ValueError(f"序列长度{seq_length}超出允许范围({CONFIG['min_seq_length']}-{CONFIG['max_seq_length']})")
 
-    # 重塑数据以适应CNN-LSTM输入: (样本数, 序列长度, 特征数)
-    X = X.reshape(-1, seq_length, 1)
-
-    print(f"数据加载完成: 样本数={X.shape[0]}, 类别数={len(label_map)}")
+    print(f"数据加载完成: 样本数={X.shape[0]}, 形状={X.shape}, 类别数={len(label_map)}")
     print(f"类别映射: {label_map}")
     return X, y, label_map
 
 
 def preprocess_data(X, y, n_classes):
     """数据预处理：标准化、划分数据集"""
-    # 标准化数据
-    X_2d = X.reshape(-1, X.shape[1])
+    # 标准化数据 - 现在需要处理多通道
+    # 将形状从 (samples, seq_length, channels) 重塑为 (samples * seq_length, channels)
+    X_2d = X.reshape(-1, X.shape[2])
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_2d)
+    # 重塑回原始形状
     X = X_scaled.reshape(X.shape)
     print(f"标准化后数据: mean={X.mean():.4f}, std={X.std():.4f}")
 
-    # 保存标准化器
+    # 保存标准化器（新增目录创建逻辑）
+    os.makedirs(CONFIG["model_dir"], exist_ok=True)  # <-- 新增目录创建
     scaler_path = os.path.join(CONFIG["model_dir"], "scaler.pkl")
     joblib.dump(scaler, scaler_path)
     print(f"标准化器已保存至: {scaler_path}")
@@ -113,16 +139,15 @@ def preprocess_data(X, y, n_classes):
 
 
 # === 模型构建与训练 ===
-def build_cnn_lstm_model(seq_length=800, n_classes=10):
+def build_cnn_lstm_model(seq_length=800, n_classes=10, n_channels=4):
     """构建CNN-LSTM模型"""
     model = Sequential([
         # CNN层 - 提取局部特征
         Conv1D(filters=256, kernel_size=8, activation='relu', padding='causal',
-               input_shape=(seq_length, 1)),
+               input_shape=(seq_length, n_channels)),
         MaxPooling1D(pool_size=2),
         Dropout(0.2),
-        Conv1D(filters=128, kernel_size=10, activation='relu', padding='same',
-               input_shape=(seq_length, 1)),
+        Conv1D(filters=128, kernel_size=10, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
         Dropout(0.2),
         Conv1D(filters=128, kernel_size=11, activation='relu', padding='causal'),
@@ -170,7 +195,7 @@ def train_model(X_train, X_val, y_train, y_val, n_classes, seq_length, epochs, b
         os.makedirs(CONFIG["model_dir"])
 
     # 创建模型
-    model = build_cnn_lstm_model(seq_length, n_classes)
+    model = build_cnn_lstm_model(seq_length, n_classes, CONFIG["n_channels"])
 
     # 设置回调函数
     callbacks = [
@@ -216,9 +241,17 @@ def evaluate_model(model, X_test, y_test, y_test_classes, label_map):
 
     # 生成分类报告
     print("\n分类报告:")
-    # 这里根据label_map的键（类别名称）和值（类别索引），构建分类报告的目标名称
-    target_names = [k for k, v in label_map.items()]
-    report = classification_report(y_test_classes, y_pred_classes, target_names=target_names)
+    # 获取实际存在的类别索引
+    present_labels = np.unique(y_test_classes)
+    # 根据存在的类别构建目标名称
+    target_names = [k for k, v in label_map.items() if v in present_labels]
+
+    report = classification_report(
+        y_test_classes,
+        y_pred_classes,
+        labels=present_labels,
+        target_names=target_names
+    )
     print(report)
 
     return cm, report

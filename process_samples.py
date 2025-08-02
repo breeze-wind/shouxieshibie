@@ -20,7 +20,7 @@ CONFIG = {
     "base_output_dir": "processed_data",    # 基础输出目录
     "base_visualization_dir": "visualizations",  # 基础可视化目录
     "base_delete_dir": "dataset/deleted",   # 基础删除目录
-    "last_subdir": "Four_channel/mao",      # 动态子目录名
+    "last_subdir": "data/ying",      # 动态子目录名
     "modify_last_subdir": True,             # 是否动态调整路径
     "input_dir": "dataset/b_rl",            # 完整输入目录（自动生成）
     "output_dir": "processed_data/b_rl",    # 完整输出目录（自动生成）
@@ -31,9 +31,10 @@ CONFIG = {
     "num_channels": 4,                      # 通道数量
     "channel_columns": ["[25071720]", "[25071721]", "[25071722]", "[25071723]"],  # 通道名称（需与CSV表头对应）
     "channel_colors": ['b', 'g', 'r', 'c'], # 通道可视化颜色（与通道顺序对应）
-    "seq_length": 50,                       # 标准化序列长度
-    "min_seq_length": 50,                   # 最小序列长度校验阈值
-    "max_seq_length": 1000,                 # 最大序列长度校验阈值
+
+    #"seq_length": 50,                       # 标准化序列长度
+    #"min_seq_length": 50,                   # 最小序列长度校验阈值
+    #"max_seq_length": 1000,                 # 最大序列长度校验阈值
 
     # ======================== 预处理配置 ========================
     "filter_window": 20,                    # 滤波窗口大小（Savitzky-Golay）
@@ -313,6 +314,10 @@ def process_file(file_path, config):
     all_split_points = []
     all_segment_status = []
 
+    # 创建文件级输出目录（与GUI保持一致）
+    base_output = os.path.join(config["output_dir"], os.path.splitext(file_name)[0])
+    os.makedirs(base_output, exist_ok=True)
+
     # 动态循环处理每个通道（数量由config["num_channels"]决定）
     for ch_idx in range(config["num_channels"]):
         ch_name = config["channel_columns"][ch_idx]
@@ -431,6 +436,10 @@ def process_file(file_path, config):
                     # 进行插值得到新样本
                     sample = f(x_new)
                 samples.append(sample)
+                ch_output_dir = os.path.join(base_output, f"ch{ch_idx}")
+                os.makedirs(ch_output_dir, exist_ok=True)
+                np.save(os.path.join(ch_output_dir, f'segment_{len(samples) - 1}.npy'), sample)
+
         # 可视化当前通道（传入通道索引，使用原始文件名）
         if config["visualize_samples"] and split_points:
             visualize_splits(
@@ -448,69 +457,8 @@ def process_file(file_path, config):
         all_split_points.append(split_points)
         all_segment_status.append(segment_status)
 
-    def process_file(file_path, config):
-        """处理单个文件（支持多通道动态处理）"""
-        file_name = os.path.basename(file_path)
-        print(f"\nProcessing {file_name}...")
-
-        # 加载多通道数据（shape: [n_samples, num_channels]）
-        resistance = load_data(file_path)
-        if resistance is None:
-            return 0, [], []
-
-        all_samples = []  # 存储所有通道的样本
-        all_split_points = []
-        all_segment_status = []
-
-        # 创建文件级输出目录（与GUI保持一致）
-        base_output = os.path.join(config["output_dir"], os.path.splitext(file_name)[0])
-        os.makedirs(base_output, exist_ok=True)  # 确保目录存在
-
-        # 动态循环处理每个通道（数量由config["num_channels"]决定）
-        for ch_idx in range(config["num_channels"]):
-            ch_name = config["channel_columns"][ch_idx]
-            print(f"\n----- 处理通道 {ch_name} -----")
-            ch_resistance = resistance[:, ch_idx]  # 当前通道的一维数据
-
-            # 数据预处理（滤波）
-            filtered_resistance = preprocess(ch_resistance, config)
-
-            # 分割数据（原单通道逻辑保留）
-            split_points = split_by_continuity(filtered_resistance, config)
-
-            # 生成当前通道样本（原单通道逻辑保留）
-            samples = []
-            start_idx = 1 if config["keep_press_segment"] else 2
-            segment_status = []
-            segment_details = []
-
-            # ... （段分割和有效性判断逻辑保留）...
-
-            # 保存当前通道样本（改造为按通道分目录保存）
-            ch_dir = os.path.join(base_output, f"ch{ch_idx}_{ch_name.replace('[', '').replace(']', '')}")
-            os.makedirs(ch_dir, exist_ok=True)
-
-            for seg_idx, sample in enumerate(samples):
-                # 标准化序列长度（原逻辑保留）
-                if len(sample) != config["seq_length"]:
-                    x_old = np.arange(len(sample))
-                    x_new = np.linspace(0, len(sample)-1, config["seq_length"])
-                    sample = interp1d(x_old, sample, kind='linear')(x_new)
-
-                # 保存npy文件（与GUI命名格式一致）
-                npy_path = os.path.join(ch_dir, f"segment_{seg_idx}_{start}-{end}.npy")
-                np.save(npy_path, sample)
-
-                # 生成段可视化图（调用与GUI相同的可视化函数）
-                visualize_single_segment(sample, start, end, seg_idx, ch_idx, ch_dir, config)
-
-            # ... （通道结果合并逻辑保留）...
-
-        # 生成四通道联合可视化（统一可视化路径）
-        if config["visualize_samples"]:
-            visualize_combined_channels(resistance, split_points, file_name, base_output, config)
-
-        return len(all_samples), all_split_points, all_segment_status
+    # 添加最终的返回语句（修复None返回值问题）
+    return len(all_samples), all_split_points, all_segment_status  # <-- 新增
 
 
 def update_directory_paths(config):
@@ -551,32 +499,48 @@ def process_dataset(config):
         print("请将CSV文件放入此目录后重新运行")
         return 0, 0
 
-    csv_files = [f for f in os.listdir(config["input_dir"]) if f.lower().endswith('.csv')]
-    print(f"发现 {len(csv_files)} 个CSV文件")
+    # 递归获取所有CSV文件并保留相对路径
+    csv_files = []
+    for root, dirs, files in os.walk(config["input_dir"]):
+        for file in files:
+            if file.lower().endswith('.csv'):
+                rel_path = os.path.relpath(root, config["input_dir"])
+                csv_files.append((os.path.join(root, file), rel_path))
+
+    print(f"发现 {len(csv_files)} 个CSV文件（包含子目录）")
 
     total_samples = 0
     processed_files = 0
-    for file in tqdm(csv_files, desc="Processing files"):
-        file_path = os.path.join(config["input_dir"], file)
-        num_samples, _, _ = process_file(file_path, config)
-        if num_samples > 0:
-            total_samples += num_samples
-            processed_files += 1
 
-        # 检查是否需要移动数据组不足的文件
-        # 使用配置的样本阈值判断是否移动文件
-        if config["move_incomplete_files"] and num_samples < config["min_samples_to_keep"]:
-            # 确保目标目录存在
-            if not os.path.exists(config["delete_dir"]):
-                os.makedirs(config["delete_dir"])
+    # 保存原始目录路径
+    original_output = config["output_dir"]
+    original_visualization = config["visualization_dir"]
+    original_delete = config["delete_dir"]
 
-            # 移动文件到目标目录
-            target_path = os.path.join(config["delete_dir"], file)
-            try:
-                shutil.move(file_path, target_path)
-                print(f"已将数据组不足的文件 '{file}' 移动到 {config['delete_dir']}")
-            except Exception as e:
-                print(f"移动文件 '{file}' 时出错: {e}")
+    for file_path, rel_path in tqdm(csv_files, desc="Processing files"):
+        try:
+            # 动态创建子目录结构
+            if rel_path != ".":
+                config["output_dir"] = os.path.join(original_output, rel_path)
+                config["visualization_dir"] = os.path.join(original_visualization, rel_path)
+                config["delete_dir"] = os.path.join(original_delete, rel_path)
+
+            # 处理文件（原有逻辑保留）
+            num_samples, _, _ = process_file(file_path, config)
+            if num_samples > 0:
+                total_samples += num_samples
+                processed_files += 1
+
+            # 移动不完整文件（原有逻辑保留）
+            if config["move_incomplete_files"] and num_samples < config["min_samples_to_keep"]:
+                os.makedirs(config["delete_dir"], exist_ok=True)
+                shutil.move(file_path, os.path.join(config["delete_dir"], os.path.basename(file_path)))
+
+        finally:
+            # 恢复原始目录路径
+            config["output_dir"] = original_output
+            config["visualization_dir"] = original_visualization
+            config["delete_dir"] = original_delete
 
     print(f"\n处理完成!")
     print(f"成功处理 {processed_files} 个文件")
@@ -797,6 +761,7 @@ class BreakpointAnnotator:
     def clear_breakpoints(self):
         """清空所有断点"""
         if messagebox.askyesno("确认", "确定要清空所有断点吗?"):
+            self.split_points = []
             self.split_points = []
             self.update_plot()
             self.status_text.set("已清空所有断点")
