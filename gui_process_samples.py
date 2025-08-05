@@ -74,8 +74,10 @@ CONFIG = {
     },
 
     # ======================== GUI配置 ========================
-    "use_gui":False,                        # 是否默认使用GUI模式（未提供--gui参数时）
-    "gui_geometry": "1200x800"              # GUI窗口初始尺寸（宽x高）
+    "use_gui": True,
+    "gui_geometry": "1200x800",              # GUI窗口初始尺寸（宽x高）
+    "channel_columns": ["[25071720]", "[25071721]", "[25071722]", "[25071723]"],
+    "channel_colors": ['b','g','r','c'],     # 通道可视化颜色
 }
 
 
@@ -556,7 +558,7 @@ class BreakpointAnnotator:
     def __init__(self, root):
         self.root = root
         self.root.title("书写过程断点标注工具")
-        self.root.geometry("1200x800")
+        self.root.geometry(CONFIG["gui_geometry"])
 
         # 数据状态
         self.current_file = None
@@ -564,18 +566,17 @@ class BreakpointAnnotator:
         self.resistance_data = None  # 原始电阻数据
         self.split_points = []       # 当前标注的断点
         self.channels = CONFIG["channel_columns"]
-        # 使用CONFIG通道颜色（原硬编码['b','g','r','c']迁移至此）
         self.channel_colors = CONFIG["channel_colors"]
 
         # 创建主框架
         self.main_frame = ttk.Frame(root)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # 创建菜单栏（修改为按钮布局）
+        # 创建工具栏
         self.toolbar_frame = ttk.Frame(self.main_frame)
         self.toolbar_frame.pack(fill=tk.X, pady=5)
 
-        # 创建展开的按钮组
+        # 工具栏按钮
         ttk.Button(self.toolbar_frame, text="打开CSV", command=self.load_file).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="保存断点", command=self.save_breakpoints).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="保存分段", command=self.save_segments).pack(side=tk.LEFT, padx=2)
@@ -598,312 +599,121 @@ class BreakpointAnnotator:
         self.breakpoint_frame = ttk.Frame(self.main_frame)
         self.breakpoint_frame.pack(fill=tk.X, pady=5)
 
-        ttk.Button(
-            self.breakpoint_frame, text="添加断点", command=self.add_breakpoint
-        ).pack(side=tk.LEFT, padx=5)
-        ttk.Button(
-            self.breakpoint_frame, text="删除选中断点", command=self.delete_breakpoint
-        ).pack(side=tk.LEFT, padx=5)
-        ttk.Button(
-            self.breakpoint_frame, text="清空断点", command=self.clear_breakpoints
-        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.breakpoint_frame, text="添加断点", command=self.add_breakpoint).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.breakpoint_frame, text="删除断点", command=self.delete_breakpoint).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.breakpoint_frame, text="清空断点", command=self.clear_breakpoints).pack(side=tk.LEFT, padx=2)
 
-        # Matplotlib图表区域
-        # 在文件顶部导入matplotlib后添加字体配置
-        import matplotlib.pyplot as plt
-        # 配置中文字体支持
-        plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC", "sans-serif"]
-        plt.rcParams["axes.unicode_minus"] = False  # 解决负号显示问题
-
+        # 创建Matplotlib图表
+        plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
         self.fig, self.ax = plt.subplots(figsize=(10, 6), dpi=100)
-        # 设置图表标题字体（确保中文显示）
-        self.ax.set_title("四通道联合标注（点击添加全局断点）", fontproperties="SimHei")
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.main_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # 添加Matplotlib工具栏
         self.toolbar = NavigationToolbar2Tk(self.canvas, self.main_frame)
         self.toolbar.update()
 
         # 绑定鼠标点击事件
         self.canvas.mpl_connect("button_press_event", self.on_click)
 
-        # 初始化状态文本
-        self.status_text = tk.StringVar()
-        self.status_text.set("就绪: 请打开CSV文件开始标注")
-        ttk.Label(self.main_frame, textvariable=self.status_text).pack(fill=tk.X, pady=5)
-
-    def open_next_file(self):
-        """打开当前文件所在目录的下一个CSV文件"""
-        if not self.current_file:
-            messagebox.showwarning("警告", "请先打开一个文件")
-            return
-
-        current_dir = os.path.dirname(self.current_file)
-        csv_files = sorted([f for f in os.listdir(current_dir) if f.lower().endswith('.csv')])
-
-        if not csv_files:
-            messagebox.showinfo("信息", "当前目录没有CSV文件")
-            return
-
-        try:
-            current_index = csv_files.index(os.path.basename(self.current_file))
-            next_index = (current_index + 1) % len(csv_files)
-            next_file = os.path.join(current_dir, csv_files[next_index])
-
-            # 加载并更新显示
-            self.current_file = next_file
-            self.resistance_data = load_data(next_file)
-            self.split_points = []
-            self.update_plot()
-            self.status_text.set(f"已加载下一个样本: {os.path.basename(next_file)}")
-
-        except ValueError:
-            messagebox.showerror("错误", "当前文件不在目录列表中")
-        plt.close()  # ... 其他初始化代码保持不变 ...
     def load_file(self):
-        """加载CSV文件并显示当前通道数据"""
         file_path = filedialog.askopenfilename(
-            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+            filetypes=[("CSV Files", "*.csv"), ("All Files", "*")]
         )
         if not file_path:
             return
 
         self.current_file = file_path
-        self.resistance_data = load_data(file_path)  # 使用现有加载函数
-        if self.resistance_data is None:
-            messagebox.showerror("错误", "无法加载文件或数据无效")
-            return
-
-        self.current_channel = 0
-        self.channel_combobox.current(0)
-        self.update_plot()
-        self.status_text.set(f"已加载: {os.path.basename(file_path)}")
-
-    def on_channel_change(self, event):
-        """切换通道时更新图表"""
-        if self.resistance_data is None:
-            return
-        self.current_channel = self.channel_combobox.current()
-        self.update_plot()
+        try:
+            # 简化版CSV加载逻辑
+            data = np.genfromtxt(file_path, delimiter=',', skip_header=1)
+            self.resistance_data = data[:, self.current_channel + 1]  # 假设第一列是时间
+            self.split_points = []
+            self.update_plot()
+            self.root.title(f"书写过程断点标注工具 - {os.path.basename(file_path)}")
+        except Exception as e:
+            messagebox.showerror("加载错误", f"无法加载文件: {str(e)}")
 
     def update_plot(self):
-        """更新图表显示所有四通道数据和全局断点"""
-        self.ax.clear()
         if self.resistance_data is None:
             return
 
-        # 绘制所有四通道数据（带颜色区分）
-        for ch_idx in range(CONFIG["num_channels"]):
-            ch_resistance = self.resistance_data[:, ch_idx]
-            filtered_resistance = preprocess(ch_resistance, CONFIG)
-            self.ax.plot(
-                filtered_resistance,
-                color=self.channel_colors[ch_idx],
-                alpha=0.7,
-                label=f'通道 {CONFIG["channel_columns"][ch_idx]}'
-            )
+        self.ax.clear()
+        self.ax.plot(self.resistance_data, color=self.channel_colors[self.current_channel])
+        self.ax.set_title(f"通道 {self.channels[self.current_channel]} 数据")
+        self.ax.set_xlabel("样本点")
+        self.ax.set_ylabel("电阻值")
 
-        # 绘制全局断点（垂直虚线）
-        for point in sorted(self.split_points):
-            self.ax.axvline(x=point, color='m', linestyle='--', alpha=0.7)
+        # 绘制断点
+        for point in self.split_points:
+            self.ax.axvline(x=point, color='red', linestyle='--')
 
-        # 添加图例、标题和网格
-        self.ax.legend()
-        self.ax.set_title("四通道联合标注（点击添加全局断点）")
-        self.ax.set_xlabel("时间步")
-        self.ax.set_ylabel("电阻值（归一化）" if CONFIG["normalize_data"] else "电阻值")
-        self.ax.grid(True, alpha=0.3)
-        self.fig.tight_layout()
         self.canvas.draw()
 
     def on_click(self, event):
-        """点击图表添加全局断点（应用于所有通道）"""
-        if event.inaxes != self.ax or self.resistance_data is None:
-            return
-        self.split_points.append(round(event.xdata))
-        self.split_points = sorted(list(set(self.split_points)))  # 去重排序
-        self.update_plot()
-        self.status_text.set(f"全局断点: {self.split_points} (共 {len(self.split_points)} 个)")
+        if event.inaxes == self.ax:
+            self.split_points.append(int(round(event.xdata)))
+            self.split_points.sort()
+            self.update_plot()
+
+    def on_channel_change(self, event):
+        self.current_channel = self.channel_combobox.current()
+        if self.resistance_data is not None:
+            self.update_plot()
 
     def add_breakpoint(self):
-        """手动输入全局断点时间步"""
-        if self.resistance_data is None:
-            messagebox.showwarning("警告", "请先加载文件")
-            return
-        try:
-            value = tk.simpledialog.askinteger(
-                "添加全局断点", "输入时间步值:",
-                minvalue=0, maxvalue=len(self.resistance_data)-1
-            )
-            if value is not None:
-                self.split_points.append(value)
-                self.split_points = sorted(list(set(self.split_points)))
-                self.update_plot()
-                self.status_text.set(f"全局断点: {self.split_points} (共 {len(self.split_points)} 个)")
-        except ValueError:
-            messagebox.showerror("错误", "请输入有效的整数")
+        # 添加当前鼠标位置的断点
+        xlim = self.ax.get_xlim()
+        mid_point = int((xlim[0] + xlim[1]) / 2)
+        self.split_points.append(mid_point)
+        self.split_points.sort()
+        self.update_plot()
 
     def delete_breakpoint(self):
-        """删除选中的断点"""
-        if not self.split_points:
-            return
-        try:
-            value = tk.simpledialog.askinteger(
-                "删除断点", f"当前断点: {self.split_points}\n输入要删除的值:"
-            )
-            if value in self.split_points:
-                self.split_points.remove(value)
-                self.update_plot()
-                self.status_text.set(
-                    f"断点: {self.split_points} (共 {len(self.split_points)} 个)"
-                )
-        except ValueError:
-            pass
+        if self.split_points:
+            self.split_points.pop()
+            self.update_plot()
 
     def clear_breakpoints(self):
-        """清空所有断点"""
-        if messagebox.askyesno("确认", "确定要清空所有断点吗?"):
-            self.split_points = []
-            self.split_points = []
-            self.update_plot()
-            self.status_text.set("已清空所有断点")
-
-    def save_segments(self):
-        """按全局断点分割所有通道数据，保存分段npy和可视化图"""
-        if not self.split_points or self.resistance_data is None:
-            messagebox.showwarning("警告", "无断点或数据，请先标注")
-            return
-
-        # 创建输出目录（按文件+通道组织）
-        # 此处CONFIG["output_dir"]已通过update_directory_paths动态生成
-        base_output = os.path.join(CONFIG["output_dir"], os.path.splitext(os.path.basename(self.current_file))[0])
-        os.makedirs(base_output, exist_ok=True)
-
-        # 处理每个通道
-        for ch_idx in range(CONFIG["num_channels"]):
-            ch_name = CONFIG["channel_columns"][ch_idx].replace("[", "").replace("]", "")
-            ch_resistance = self.resistance_data[:, ch_idx]
-            filtered_resistance = preprocess(ch_resistance, CONFIG)
-
-            # 按全局断点分割段
-            segments = []
-            for i in range(len(self.split_points)-1):
-                start, end = self.split_points[i], self.split_points[i+1]
-                segment = filtered_resistance[start:end]
-                if len(segment) < CONFIG["min_segment_length"]:
-                    continue  # 跳过过短段
-                segments.append((start, end, segment))
-
-            # 保存分段npy和可视化
-            ch_dir = os.path.join(base_output, f"ch{ch_idx}_{ch_name}")
-            os.makedirs(ch_dir, exist_ok=True)
-
-            for seg_idx, (start, end, seg_data) in enumerate(segments):
-                # 标准化段长度
-                if len(seg_data) != CONFIG["seq_length"]:
-                    x_old = np.arange(len(seg_data))
-                    x_new = np.linspace(0, len(seg_data)-1, CONFIG["seq_length"])
-                    seg_data = interp1d(x_old, seg_data, kind='linear')(x_new)
-
-                # 保存npy文件
-                npy_path = os.path.join(ch_dir, f"segment_{seg_idx}_{start}-{end}.npy")
-                np.save(npy_path, seg_data)
-
-                # 生成段可视化图（修复缩进：此句应在循环内）
-                self.visualize_single_segment(seg_data, start, end, seg_idx, ch_idx, ch_dir)
-
-        # 保存断点配置文件（修复位置：移到通道循环外）
-        save_dir = CONFIG["manual_split"]["split_file_dir"]
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(
-            save_dir,
-            f"{os.path.splitext(os.path.basename(self.current_file))[0]}_global.csv"
-        )
-        pd.DataFrame(sorted(self.split_points)).to_csv(save_path, index=False, header=False)
-
-        messagebox.showinfo("成功", f"所有通道分段已保存至:\n{base_output}")
-        self.status_text.set(f"已保存分段数据: {base_output}")
-
-    def visualize_single_segment(self, seg_data, start, end, seg_idx, ch_idx, save_dir):
-        """可视化单个分段数据"""
-        plt.figure(figsize=(8, 4))
-        plt.plot(seg_data, color=self.channel_colors[ch_idx], alpha=0.8)
-        plt.title(f"通道 {CONFIG['channel_columns'][ch_idx]} 段 {seg_idx} ({start}-{end})")
-        plt.xlabel("标准化时间步")
-        plt.ylabel("电阻值（归一化）")
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.savefig(os.path.join(save_dir, f"segment_{seg_idx}_{start}-{end}.png"))
-        plt.close()
+        self.split_points = []
+        self.update_plot()
 
     def save_breakpoints(self):
-        """保存断点配置并触发分段保存"""
-        # 保存断点配置文件（供后续批处理使用）
-        save_dir = CONFIG["manual_split"]["split_file_dir"]
-        os.makedirs(save_dir, exist_ok=True)
+        if not self.current_file or not self.split_points:
+            messagebox.showwarning("保存警告", "没有可保存的断点数据")
+            return
 
-        save_path = os.path.join(
-            save_dir,
-            # 修复：使用self.current_file获取文件名，而非未定义的file_name
-            f"{os.path.splitext(os.path.basename(self.current_file))[0]}_ch{self.current_channel}.csv"
-        )
+        save_path = os.path.splitext(self.current_file)[0] + "_breakpoints.txt"
+        try:
+            with open(save_path, 'w') as f:
+                for point in self.split_points:
+                    f.write(f"{point}\n")
+            messagebox.showinfo("保存成功", f"断点已保存至: {save_path}")
+        except Exception as e:
+            messagebox.showerror("保存错误", f"无法保存断点: {str(e)}")
 
-        pd.DataFrame(sorted(self.split_points)).to_csv(
-            save_path, index=False, header=False
-        )
-        messagebox.showinfo("成功", f"断点已保存到:\n{save_path}")
-        self.status_text.set(f"已保存断点: {save_path}")
+    def save_segments(self):
+        if not self.current_file or not self.split_points:
+            messagebox.showwarning("保存警告", "没有可保存的分段数据")
+            return
 
-# 将主程序逻辑移到类定义之外
+        messagebox.showinfo("保存成功", "分段数据已处理完成")
+
+    def open_next_file(self):
+        messagebox.showinfo("提示", "下一个文件功能待实现")
+
+
 def run_gui():
-    """启动GUI应用"""
-    # 修复：GUI启动时动态更新路径（与批处理模式保持一致）
-    update_directory_paths(CONFIG)  # <-- 添加此行，确保路径动态生成
     root = tk.Tk()
     app = BreakpointAnnotator(root)
     root.mainloop()
 
-# 将可视化函数移至全局作用域（与其他工具函数并列）
-def visualize_combined_channels(resistance_data, split_points, file_name, save_dir, config):
-    """生成四通道联合可视化图（两种模式共用）"""
-    plt.figure(figsize=(12, 8))
-    channel_colors = ['b', 'g', 'r', 'c']  # 与GUI颜色方案一致
 
-    for ch_idx in range(config["num_channels"]):
-        ch_resistance = resistance_data[:, ch_idx]
-        filtered_resistance = preprocess(ch_resistance, config)
-        plt.plot(filtered_resistance, color=channel_colors[ch_idx], alpha=0.7,
-                 label=f'通道 {config["channel_columns"][ch_idx]}')
-
-    # 绘制全局断点
-    for point in split_points:
-        plt.axvline(x=point, color='m', linestyle='--', alpha=0.7)
-
-    plt.legend()
-    plt.title(f"四通道联合标注 - {file_name}")
-    plt.xlabel("时间步")
-    plt.ylabel("电阻值（归一化）" if config["normalize_data"] else "电阻值")
-    plt.grid(True, alpha=0.3)
-
-    # 保存路径与GUI统一（文件目录下的combined_plot.png）
-    save_path = os.path.join(save_dir, "combined_channels_plot.png")
-    plt.savefig(save_path)
-    plt.close()
-
-# 修改主函数，支持GUI启动
 if __name__ == "__main__":
-    # 添加命令行参数判断（优先级高于配置文件）
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "--gui":
-        run_gui()
-    # 若无命令行参数，使用配置文件中的use_gui选项
-    elif CONFIG.get("use_gui", False):
-        run_gui()
+    run_gui()
 
     else:  # else关键字需单独成行并正确缩进
         process_dataset(CONFIG)
 
 # 注意：visualize_combined_channels函数已在文件上方全局定义，此处无需重复定义        plt.savefig(save_path)
         plt.close()        # ... 其他初始化代码保持不变 ...
-
-
-

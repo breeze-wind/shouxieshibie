@@ -11,9 +11,10 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 # === 预测配置 ===
 PREDICT_CONFIG = {
     "model_path": "models/data/ying/best_model.h5",  # 模型路径
-    "processed_dir": "predict_samples/data/tra/a_tian"
+    "processed_dir": "predict_samples"
                      ,  # 处理后NPY目录
-    "output_dir": "prediction_results/2.0.7/data/tra/a_tian",  # 预测结果保存目录
+    "output_dir": "prediction_results/2.0.8",  # 预测结果保存目录
+    "last_dir":"/data/pre/i/ch0",
     "seq_length": 50,  # 序列长度
     "global_normalization": True,  # 使用全局归一化
     # 原有配置保持不变
@@ -103,7 +104,7 @@ def main():
         return
 
     # 加载处理后的NPY文件
-    processed_dir = PREDICT_CONFIG["processed_dir"]
+    processed_dir = PREDICT_CONFIG["processed_dir"]+PREDICT_CONFIG["last_dir"]
     if not os.path.exists(processed_dir):
         print(f"错误：处理后NPY目录 {processed_dir} 不存在")
         return
@@ -163,7 +164,7 @@ def main():
                     confidence,
                     file,
                     idx,
-                    PREDICT_CONFIG["output_dir"],
+                    PREDICT_CONFIG["output_dir"]+PREDICT_CONFIG["last_dir"],
                     idx_to_label
                 )
 

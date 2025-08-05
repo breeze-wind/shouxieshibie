@@ -67,9 +67,9 @@ class ImageManagerApp:
             self.channel_dirs = [os.path.join(parent_dir, d) for d in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, d))]
             
             # 确保有4个通道文件夹
-            if len(self.channel_dirs) != 4:
-                messagebox.showwarning("警告", f"所选目录下找到{len(self.channel_dirs)}个子目录，需要 exactly 4个通道文件夹")
-                return
+            # if len(self.channel_dirs) != 4:
+            #     messagebox.showwarning("警告", f"所选目录下找到{len(self.channel_dirs)}个子目录，需要 exactly 4个通道文件夹")
+            #     return
             
             self.load_grouped_images()
             if self.grouped_images:
