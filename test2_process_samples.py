@@ -591,7 +591,7 @@ class BreakpointAnnotator:
         ttk.Button(self.toolbar_frame, text="下一个样本", command=self.open_next_file).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="退出", command=root.quit).pack(side=tk.RIGHT, padx=2)
         ttk.Button(self.toolbar_frame, text="自动分割", command=self.auto_split).pack(side=tk.LEFT, padx=2)  # 新增按钮
-        ttk.Button(self.toolbar_frame, text="200步视图", command=self.zoom_to_200_steps).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.toolbar_frame, text="放大视图", command=self.zoom_to_200_steps).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="还原全图", command=self.reset_view).pack(side=tk.LEFT, padx=2)
 
         # 通道选择框架
@@ -612,6 +612,7 @@ class BreakpointAnnotator:
         # 断点控制按钮
         self.breakpoint_frame = ttk.Frame(self.main_frame)
         self.breakpoint_frame.pack(fill=tk.X, pady=5)
+        # 绑定滚轮事件（新增）
 
         ttk.Button(
             self.breakpoint_frame, text="添加断点", command=self.add_breakpoint
@@ -622,7 +623,7 @@ class BreakpointAnnotator:
         ttk.Button(
             self.breakpoint_frame, text="清空断点", command=self.clear_breakpoints
         ).pack(side=tk.LEFT, padx=5)
-
+        ttk.Button(self.toolbar_frame, text="设置保存路径", command=self.set_save_directory).pack(side=tk.RIGHT, padx=2)
         # Matplotlib图表区域
         # 在文件顶部导入matplotlib后添加字体配置
         import matplotlib.pyplot as plt
@@ -637,26 +638,74 @@ class BreakpointAnnotator:
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         self.toolbar = NavigationToolbar2Tk(self.canvas, self.main_frame)
         self.toolbar.update()
-
+        #↓绑定中键
+        self.canvas.mpl_connect("scroll_event", self.on_scroll)
+        self.toolbar.update()
         # 绑定鼠标点击事件
         self.canvas.mpl_connect("button_press_event", self.on_click)
         self.canvas.mpl_connect("motion_notify_event", self.on_mouse_move)  # 新增：鼠标移动事件
 
+        self.custom_output_dir = None
+        self.custom_split_dir = None
         # 初始化状态文本
         self.status_text = tk.StringVar()
         self.status_text.set("就绪: 请打开CSV文件开始标注 | 鼠标中键点击段区域审核样本")  # 更新提示
         ttk.Label(self.main_frame, textvariable=self.status_text).pack(fill=tk.X, pady=5)
+
+    def set_save_directory(self):
+        """设置自定义保存路径"""
+        dir_path = filedialog.askdirectory(title="选择保存目录")
+        if dir_path:
+            self.custom_output_dir = dir_path
+            self.custom_split_dir = os.path.join(dir_path, "manual_splits")
+            self.status_text.set(f"保存路径已设置为: {dir_path}")
+
+    def on_scroll(self, event):
+        """处理鼠标滚轮滚动事件"""
+        if not self.is_zoomed or self.resistance_data is None:
+            return
+
+        # 向上滚动：向前200步，向下滚动：向后200步
+        if event.button == 'up':
+            self.scroll_view(forward=True)
+        elif event.button == 'down':
+            self.scroll_view(forward=False)
+
+    def scroll_view(self, forward=True):
+        """控制视图滚动（新增方法）"""
+        data_length = len(self.resistance_data)
+        step = self.view_window_size
+
+        if forward:
+            new_start = self.view_start + step
+            # 检查是否超出数据范围
+            if new_start + step > data_length:
+                new_start = 0
+        else:
+            new_start = self.view_start - step
+            # 处理负数情况
+            if new_start < 0:
+                new_start = data_length - (data_length % step or step)
+
+        self.view_start = new_start
+        self.update_plot()
+        self.status_text.set(f"当前视图范围: {self.view_start}-{self.view_start + self.view_window_size}")
 
     def zoom_to_200_steps(self):
         """切换到200步窗口视图"""
         if self.resistance_data is None:
             return
 
-        # 自动滚动到下一段（超过数据长度时回到起点）
         data_length = len(self.resistance_data)
-        self.view_start = (self.view_start + self.view_window_size) % data_length
+        if data_length <= self.view_window_size:
+            messagebox.showinfo("提示", "数据长度不足200步，已显示全部数据")
+            self.is_zoomed = False
+            self.view_start = 0
+            return
+
         self.is_zoomed = True
-        self.update_plot()
+        self.scroll_view(forward=True)  # 改为调用统一滚动方法
+
 
     def reset_view(self):
         """恢复完整视图"""
@@ -932,6 +981,7 @@ class BreakpointAnnotator:
 
     def save_segments(self):
         """修改保存逻辑，仅保存合格样本"""
+
         if not self.split_points or self.resistance_data is None:
             messagebox.showwarning("警告", "无断点或数据，请先标注")
             return
@@ -943,7 +993,10 @@ class BreakpointAnnotator:
             return
 
         # 创建输出目录
-        base_output = os.path.join(CONFIG["output_dir"], os.path.splitext(os.path.basename(self.current_file))[0])
+
+        base_output = self.custom_output_dir or CONFIG["output_dir"]
+        base_output = os.path.join(base_output, os.path.splitext(os.path.basename(self.current_file))[0])
+
         os.makedirs(base_output, exist_ok=True)
 
         # 处理每个通道
@@ -1034,7 +1087,7 @@ class BreakpointAnnotator:
     def save_breakpoints(self):
         """保存断点配置并触发分段保存"""
         # 保存断点配置文件（供后续批处理使用）
-        save_dir = CONFIG["manual_split"]["split_file_dir"]
+        save_dir = self.custom_split_dir or CONFIG["manual_split"]["split_file_dir"]
         os.makedirs(save_dir, exist_ok=True)
 
         save_path = os.path.join(
