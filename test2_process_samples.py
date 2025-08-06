@@ -10,7 +10,7 @@ from scipy.signal import savgol_filter
 from tqdm import tqdm
 import chardet
 from scipy.interpolate import interp1d
-
+import json
 CONFIG = {
     # ======================== 核心配置 ========================
     "version": "2.0",  # 配置版本标识（便于多版本兼容）
@@ -588,12 +588,17 @@ class BreakpointAnnotator:
         ttk.Button(self.toolbar_frame, text="打开CSV", command=self.load_file).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="保存断点", command=self.save_breakpoints).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="保存分段", command=self.save_segments).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.toolbar_frame, text="上一个样本", command=self.open_previous_file).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="下一个样本", command=self.open_next_file).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="退出", command=root.quit).pack(side=tk.RIGHT, padx=2)
         ttk.Button(self.toolbar_frame, text="自动分割", command=self.auto_split).pack(side=tk.LEFT, padx=2)  # 新增按钮
         ttk.Button(self.toolbar_frame, text="放大视图", command=self.zoom_to_200_steps).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.toolbar_frame, text="还原全图", command=self.reset_view).pack(side=tk.LEFT, padx=2)
-
+        ttk.Button(self.toolbar_frame, text="导出配置到文件", command=self.export_config_to_file).pack(side=tk.RIGHT,
+                                                                                                       padx=2)
+        ttk.Button(self.toolbar_frame, text="保存配置到内存", command=self.save_config_to_memory).pack(side=tk.RIGHT,
+                                                                                                       padx=2)
+        ttk.Button(self.toolbar_frame, text="配置管理", command=self.edit_config).pack(side=tk.RIGHT, padx=2)
         # 通道选择框架
         self.channel_frame = ttk.Frame(self.main_frame)
         self.channel_frame.pack(fill=tk.X, pady=5)
@@ -652,6 +657,37 @@ class BreakpointAnnotator:
         self.status_text.set("就绪: 请打开CSV文件开始标注 | 鼠标中键点击段区域审核样本")  # 更新提示
         ttk.Label(self.main_frame, textvariable=self.status_text).pack(fill=tk.X, pady=5)
 
+    def open_previous_file(self):
+        """打开当前文件所在目录的上一个CSV文件"""
+        if not self.current_file:
+            messagebox.showwarning("警告", "请先打开一个文件")
+            return
+
+        current_dir = os.path.dirname(self.current_file)
+        csv_files = sorted([f for f in os.listdir(current_dir) if f.lower().endswith('.csv')])
+
+        if not csv_files:
+            messagebox.showinfo("信息", "当前目录没有CSV文件")
+            return
+
+        try:
+            current_index = csv_files.index(os.path.basename(self.current_file))
+            # 修改索引计算方式实现循环切换
+            previous_index = (current_index - 1) % len(csv_files)
+            previous_file = os.path.join(current_dir, csv_files[previous_index])
+
+            # 加载并更新显示（与下一个样本保持相同逻辑）
+            self.current_file = previous_file
+            self.resistance_data = load_data(previous_file)
+            self.split_points = []
+            self.segment_status = {}  # 重置审核状态
+            self.update_plot()
+            base_name = os.path.basename(previous_file)
+            self.root.title(f"书写过程断点标注工具 - {base_name}")
+            self.status_text.set(f"已加载上一个样本: {base_name}")
+        except ValueError:
+            messagebox.showerror("错误", "当前文件不在目录列表中")
+        plt.close()
     def set_save_directory(self):
         """设置自定义保存路径"""
         dir_path = filedialog.askdirectory(title="选择保存目录")
@@ -667,9 +703,9 @@ class BreakpointAnnotator:
 
         # 向上滚动：向前200步，向下滚动：向后200步
         if event.button == 'up':
-            self.scroll_view(forward=True)
-        elif event.button == 'down':
             self.scroll_view(forward=False)
+        elif event.button == 'down':
+            self.scroll_view(forward=True)
 
     def scroll_view(self, forward=True):
         """控制视图滚动（新增方法）"""
@@ -761,7 +797,9 @@ class BreakpointAnnotator:
             self.split_points = []
             self.segment_status = {}  # 重置审核状态
             self.update_plot()
-            self.status_text.set(f"已加载下一个样本: {os.path.basename(next_file)}")
+            base_name = os.path.basename(next_file)
+            self.root.title(f"书写过程断点标注工具 - {base_name}")
+            self.status_text.set(f"已加载下一个样本: {base_name}")
 
         except ValueError:
             messagebox.showerror("错误", "当前文件不在目录列表中")
@@ -776,18 +814,21 @@ class BreakpointAnnotator:
             return
 
         self.current_file = file_path
-        self.resistance_data = load_data(file_path)  # 使用现有加载函数
+        self.resistance_data = load_data(file_path)
         if self.resistance_data is None:
             messagebox.showerror("错误", "无法加载文件或数据无效")
             return
 
+        # 在窗口标题添加文件名显示
+        base_name = os.path.basename(self.current_file)
+        self.root.title(f"书写过程断点标注工具 - {base_name}")
+
         self.current_channel = 0
         self.channel_combobox.current(0)
         self.split_points = []
-        self.segment_status = {}  # 重置审核状态
+        self.segment_status = {}
         self.update_plot()
-        self.status_text.set(f"已加载: {os.path.basename(file_path)}")
-
+        self.status_text.set(f"已加载: {base_name}")
     def on_channel_change(self, event):
         """切换通道时更新图表"""
         if self.resistance_data is None:
@@ -970,6 +1011,87 @@ class BreakpointAnnotator:
                 )
         except ValueError:
             pass
+
+    def edit_config(self):
+        """配置编辑窗口"""
+        self.config_window = tk.Toplevel(self.root)
+        self.config_window.title("算法参数配置")
+        self.config_window.geometry("500x600")
+        # 滚动区域设置
+        container = ttk.Frame(self.config_window)
+        container.pack(fill='both', expand=True)
+        canvas = tk.Canvas(container)
+        scrollbar = ttk.Scrollbar(self.config_window, orient="vertical", command=canvas.yview)
+        self.scrollable_frame = ttk.Frame(canvas)
+        # 配置滚动区域
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # 布局滚动组件
+        container.pack(fill="both", expand=True)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+        # 配置项
+        config_fields = [
+            ('min_writing_length', '最小有效书写长度（整数）', int),
+            ('min_segment_length', '最小分割段长度（整数）', int),
+            ('fixed_peak_threshold', '极大值固定阈值（0-1小数）', float),
+            ('writing_descent_threshold', '书写下降阈值（0-1小数）', float),
+            ('press_threshold', '按纸检测阈值（0-1小数）', float),
+            ('press_min_length', '最小按纸长度（整数）', int)
+        ]
+
+        self.config_entries = {}
+        for row, (key, label, dtype) in enumerate(config_fields):
+            ttk.Label(self.scrollable_frame, text=label).grid(row=row, column=0, padx=5, pady=5, sticky="w")
+            entry = ttk.Entry(self.scrollable_frame)
+            entry.insert(0, str(CONFIG[key]))
+            entry.grid(row=row, column=1, padx=5, pady=5)
+            self.config_entries[key] = (entry, dtype)
+
+        # 布尔型配置
+        self.keep_press_var = tk.BooleanVar(value=CONFIG["keep_press_segment"])
+        ttk.Checkbutton(self.scrollable_frame, text="保留按纸过程", variable=self.keep_press_var).grid(
+            row=len(config_fields), columnspan=2)
+
+        # 布局配置
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    def save_config_to_memory(self):
+        """内存保存逻辑"""
+        try:
+            for key, (entry, dtype) in self.config_entries.items():
+                CONFIG[key] = dtype(entry.get())
+            CONFIG["keep_press_segment"] = self.keep_press_var.get()
+            messagebox.showinfo("成功", "内存配置已更新")
+        except Exception as e:
+            messagebox.showerror("错误", f"类型错误: {str(e)}")
+
+    def export_config_to_file(self):
+        """文件导出逻辑"""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, 'w') as f:
+                    json.dump(CONFIG, f, indent=4)
+                messagebox.showinfo("成功", f"配置已导出到\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("错误", f"导出失败: {str(e)}")
 
     def clear_breakpoints(self):
         """清空所有断点"""
