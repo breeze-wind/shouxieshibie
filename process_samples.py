@@ -29,7 +29,7 @@ CONFIG = {
 
     # ======================== 数据参数 ========================
     "num_channels": 1,                      # 通道数量
-    "channel_columns": ["[25061405]"],
+    "channel_columns": [25061405],
     #单通道：[25061405]，四通道：["[25071720]", "[25071721]", "[25071722]", "[25071723]"] 通道名称（需与CSV表头对应）
     "channel_colors": ['b','g','r','c'], # 通道可视化颜色（与通道顺序对应）
 
@@ -716,13 +716,28 @@ class BreakpointAnnotator:
         self.canvas.draw()
 
     def on_click(self, event):
-        """点击图表添加全局断点（应用于所有通道）"""
+        """处理鼠标点击事件（左键添加，右键删除）"""
         if event.inaxes != self.ax or self.resistance_data is None:
             return
-        self.split_points.append(round(event.xdata))
-        self.split_points = sorted(list(set(self.split_points)))  # 去重排序
+
+        # 左键添加断点
+        if event.button == 1:  # 1表示左键
+            self.split_points.append(round(event.xdata))
+            self.split_points = sorted(list(set(self.split_points)))
+            self.status_text.set(f"全局断点: {self.split_points} (共 {len(self.split_points)} 个)")
+
+        # 右键删除最近断点
+        elif event.button == 3:  # 3表示右键
+            if not self.split_points:
+                return
+            # 寻找最近的断点（10个时间步内）
+            nearest = min(self.split_points, key=lambda x: abs(x - event.xdata))
+            if abs(nearest - event.xdata) < 10:
+                self.split_points.remove(nearest)
+                self.status_text.set(f"已删除断点 {nearest}，剩余 {len(self.split_points)} 个")
+
+        self.split_points = sorted(self.split_points)
         self.update_plot()
-        self.status_text.set(f"全局断点: {self.split_points} (共 {len(self.split_points)} 个)")
 
     def add_breakpoint(self):
         """手动输入全局断点时间步"""
@@ -904,6 +919,7 @@ if __name__ == "__main__":
 
 # 注意：visualize_combined_channels函数已在文件上方全局定义，此处无需重复定义        plt.savefig(save_path)
         plt.close()        # ... 其他初始化代码保持不变 ...
+
 
 
 
