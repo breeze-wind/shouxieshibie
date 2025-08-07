@@ -629,6 +629,9 @@ class BreakpointAnnotator:
             self.breakpoint_frame, text="清空断点", command=self.clear_breakpoints
         ).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.toolbar_frame, text="设置保存路径", command=self.set_save_directory).pack(side=tk.RIGHT, padx=2)
+        ttk.Button(
+            self.breakpoint_frame, text="一键通过", command=self.approve_all_segments
+        ).pack(side=tk.LEFT, padx=5)
         # Matplotlib图表区域
         # 在文件顶部导入matplotlib后添加字体配置
         import matplotlib.pyplot as plt
@@ -657,6 +660,19 @@ class BreakpointAnnotator:
         self.status_text.set("就绪: 请打开CSV文件开始标注 | 鼠标中键点击段区域审核样本")  # 更新提示
         ttk.Label(self.main_frame, textvariable=self.status_text).pack(fill=tk.X, pady=5)
 
+    def approve_all_segments(self):
+        """将所有分段标记为合格"""
+        if not self.split_points:
+            messagebox.showwarning("警告", "请先添加断点创建分段")
+            return
+
+        # 遍历所有可能的段索引
+        total_segments = len(self.split_points) - 1
+        for seg_idx in range(total_segments):
+            self.segment_status[seg_idx] = True
+
+        self.update_plot()
+        self.status_text.set(f"已一键通过 {total_segments} 个分段")
     def open_previous_file(self):
         """打开当前文件所在目录的上一个CSV文件"""
         if not self.current_file:
@@ -710,7 +726,7 @@ class BreakpointAnnotator:
     def scroll_view(self, forward=True):
         """控制视图滚动（新增方法）"""
         data_length = len(self.resistance_data)
-        step = self.view_window_size
+        step = 50
 
         if forward:
             new_start = self.view_start + step
