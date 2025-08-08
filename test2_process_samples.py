@@ -21,7 +21,7 @@ CONFIG = {
     "base_output_dir": "processed_data",  # 基础输出目录
     "base_visualization_dir": "visualizations",  # 基础可视化目录
     "base_delete_dir": "dataset/deleted",  # 基础删除目录
-    "last_subdir": "data/ying/A",  # 动态子目录名
+    "last_subdir": "data/ying/A_tian",  # 动态子目录名
     "modify_last_subdir": True,  # 是否动态调整路径
     "input_dir": "dataset/b_rl",  # 完整输入目录（自动生成）
     "output_dir": "processed_sample/data/ying/A",  # 完整输出目录（自动生成）
@@ -174,7 +174,8 @@ def preprocess(resistance, config):
     # 修改条件：只有当数据长度 > 窗口大小时才滤波（严格小于）
     if len(resistance) < config["filter_window"]:
         return resistance
-    return savgol_filter(resistance, config["filter_window"], config["filter_polyorder"])
+    #return savgol_filter(resistance, config["filter_window"], config["filter_polyorder"])
+    return resistance
 
 
 def split_by_continuity(resistance, config):
@@ -869,7 +870,10 @@ class BreakpointAnnotator:
         # 绘制所有通道数据
         for ch_idx in range(CONFIG["num_channels"]):
             ch_resistance = self.resistance_data[:, ch_idx]
-            filtered_resistance = preprocess(ch_resistance, CONFIG)
+            if len(ch_resistance) >= CONFIG["filter_window"]:
+                filtered_resistance = preprocess(ch_resistance, CONFIG)
+            else:
+                filtered_resistance = ch_resistance  # 短数据直接用原始值
             self.ax.plot(
                 filtered_resistance,
                 color=self.channel_colors[ch_idx],
